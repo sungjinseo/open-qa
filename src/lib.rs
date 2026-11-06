@@ -1,5 +1,6 @@
 pub mod config;
 pub mod coverage;
+pub mod dup;
 pub mod fsutil;
 pub mod gate;
 pub mod model;
