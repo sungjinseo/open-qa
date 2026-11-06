@@ -116,7 +116,7 @@ USER qualgate
 
 ## 한계
 
-- 기본 규칙은 언어별 20개씩이며, 오탐을 줄이기 위해 보수적으로 골랐습니다. `rules.extra_paths`로 직접 쓴 Opengrep 규칙 폴더를 추가할 수 있습니다.
+- 기본 규칙은 언어별 20개씩입니다. 오탐률은 아직 측정하지 않았습니다 (사내 저장소 검증 대기 중, `docs/verification.md` 참고). `rules.extra_paths`로 직접 쓴 Opengrep 규칙 폴더를 추가할 수 있습니다.
 - Vue는 `<script>`와 `<script setup>`만 분석하며 `<template>`은 분석하지 않습니다.
 - 파일 간 데이터 흐름 분석이 없습니다. 파일 하나 안에서 보이는 패턴만 찾습니다.
 - 중복도는 Sonar의 토큰 줄 방식을 따르지만 토크나이저가 달라 수치가 정확히 같지는 않습니다. 작은 샘플에서 Sonar Community와 약 7%포인트 차이를 확인했습니다 (`docs/verification.md`).
