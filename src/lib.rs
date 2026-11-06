@@ -6,6 +6,7 @@ pub mod gate;
 pub mod model;
 pub mod newcode;
 pub mod rules;
+pub mod track;
 pub mod vue;
 
 #[cfg(test)]
