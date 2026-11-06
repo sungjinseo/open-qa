@@ -28,3 +28,8 @@ walkdir = "2"
 [dev-dependencies]
 serde_json = "1"
 tempfile = "3"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

@@ -3,3 +3,4 @@ target
 .qualgate-out
 docs
 tests
+rules/tests

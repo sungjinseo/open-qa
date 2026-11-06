@@ -20,7 +20,6 @@ RUN apk add --no-cache git ca-certificates && adduser -D -u 10001 qualgate
 COPY --from=fetch --chmod=755 /f/opengrep_musllinux_x86 /usr/local/bin/opengrep
 COPY --from=build /w/target/release/qualgate /usr/local/bin/qualgate
 COPY rules /rules
-RUN rm -rf /rules/tests
 ENV HOME=/tmp
 USER qualgate
 ENTRYPOINT ["/usr/local/bin/qualgate"]
