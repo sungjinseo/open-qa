@@ -1,6 +1,7 @@
 pub mod config;
 pub mod fsutil;
 pub mod model;
+pub mod vue;
 
 #[cfg(test)]
 mod grammars {
