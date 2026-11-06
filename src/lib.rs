@@ -1,7 +1,9 @@
 pub mod config;
 pub mod coverage;
 pub mod fsutil;
+pub mod gate;
 pub mod model;
+pub mod newcode;
 pub mod rules;
 pub mod vue;
 
