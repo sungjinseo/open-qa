@@ -3,7 +3,7 @@ use crate::model::ScanResult;
 use crate::render::{self, parse_state, IssueState, SUMMARY_KEY};
 use crate::track::track;
 use anyhow::Result;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 pub const IGNORED_LABEL: &str = "qualgate:ignored";
 
@@ -28,9 +28,21 @@ fn apply_part(api: &mut dyn IssueApi, e: &Existing, title: &str, body: &str, rep
     Ok(())
 }
 
+fn is_ignored(e: &Existing) -> bool { e.issue.labels.iter().any(|l| l == IGNORED_LABEL) }
+
+fn close(api: &mut dyn IssueApi, e: &Existing, why: &str, rep: &mut SyncReport) -> Result<()> {
+    api.comment(e.issue.number, why)?;
+    api.edit_issue(e.issue.number, &e.issue.title, &e.issue.body, false)?;
+    rep.closed += 1;
+    Ok(())
+}
+
 pub fn sync(api: &mut dyn IssueApi, r: &ScanResult, base_url: &str, repo: &str) -> Result<SyncReport> {
     let labels = &r.publish.labels;
-    let primary = labels.first().map(String::as_str).unwrap_or("qualgate");
+    // 라벨이 없으면 다음 실행에서 이슈를 찾지 못해 매번 중복 생성된다.
+    let Some(primary) = labels.first().map(String::as_str) else {
+        anyhow::bail!("publish.labels가 비어 있습니다. 이슈를 찾으려면 라벨이 하나 이상 필요합니다.");
+    };
     for l in labels { api.ensure_label(l)?; }
     api.ensure_label(IGNORED_LABEL)?;
 
@@ -45,12 +57,11 @@ pub fn sync(api: &mut dyn IssueApi, r: &ScanResult, base_url: &str, repo: &str) 
     let mut rep = SyncReport::default();
     let mut desired = render::desired(r, base_url, repo);
     desired.sort_by(|a, b| b.severity.cmp(&a.severity).then(a.key.cmp(&b.key)));
-    let keys: BTreeSet<String> = desired.iter().map(|d| d.key.clone()).collect();
     let mut created_groups = 0usize;
 
     for d in &desired {
         let cur = existing.remove(&d.key).unwrap_or_default();
-        if cur.iter().any(|e| e.issue.labels.iter().any(|l| l == IGNORED_LABEL)) { continue; }
+        if cur.iter().any(is_ignored) { continue; }
         if cur.is_empty() {
             if created_groups >= r.publish.max_new_issues { rep.skipped += 1; continue; }
             created_groups += 1;
@@ -61,32 +72,35 @@ pub fn sync(api: &mut dyn IssueApi, r: &ScanResult, base_url: &str, repo: &str) 
                 None => { api.create_issue(&p.title, &p.body, labels)?; rep.created += 1; }
             }
         }
+        // 분석하지 못한 파일의 항목이 이 그룹에 있으면 남는 파트를 닫지 않는다.
+        let blocked = cur.iter().flat_map(|e| e.state.items.iter())
+            .chain(d.parts.iter().flat_map(|p| p.items.iter()))
+            .any(|i| r.unanalyzed.contains(&i.file));
+        if blocked { continue; }
         for e in cur.iter().skip(d.parts.len()) {
             if e.issue.open {
-                api.edit_issue(e.issue.number, &e.issue.title, &e.issue.body, false)?;
-                rep.closed += 1;
+                close(api, e, &format!("커밋 `{}`에서 항목이 줄어 이 파트가 더 필요하지 않아 이슈를 닫습니다.", r.commit), &mut rep)?;
             }
         }
     }
 
     let summary_existing = existing.remove(SUMMARY_KEY);
-    for (key, group) in &existing {
-        debug_assert!(!keys.contains(key));
-        for e in group {
-            let ignored = e.issue.labels.iter().any(|l| l == IGNORED_LABEL);
-            let blocked = e.state.items.iter().any(|i| r.unanalyzed.contains(&i.file));
-            if !e.issue.open || ignored || blocked { continue; }
-            api.comment(e.issue.number, &format!("커밋 `{}`에서 더 이상 발견되지 않아 이슈를 닫습니다.", r.commit))?;
-            api.edit_issue(e.issue.number, &e.issue.title, &e.issue.body, false)?;
-            rep.closed += 1;
+    for group in existing.values() {
+        let blocked = group.iter().flat_map(|e| e.state.items.iter()).any(|i| r.unanalyzed.contains(&i.file));
+        if blocked || group.iter().any(is_ignored) { continue; }
+        for e in group.iter().filter(|e| e.issue.open) {
+            close(api, e, &format!("커밋 `{}`에서 더 이상 발견되지 않아 이슈를 닫습니다.", r.commit), &mut rep)?;
         }
     }
 
-    let (title, body) = render::summary(r, rep.skipped);
-    match summary_existing.as_ref().and_then(|v| v.first()) {
-        Some(e) if e.issue.title == title && e.issue.body == body && e.issue.open => {}
-        Some(e) => { api.edit_issue(e.issue.number, &title, &body, true)?; rep.updated += 1; }
-        None => { api.create_issue(&title, &body, labels)?; rep.created += 1; }
+    let summary_ignored = summary_existing.as_ref().is_some_and(|v| v.iter().any(is_ignored));
+    if !summary_ignored {
+        let (title, body) = render::summary(r, rep.skipped);
+        match summary_existing.as_ref().and_then(|v| v.first()) {
+            Some(e) if e.issue.title == title && e.issue.body == body && e.issue.open => {}
+            Some(e) => { api.edit_issue(e.issue.number, &title, &body, true)?; rep.updated += 1; }
+            None => { api.create_issue(&title, &body, labels)?; rep.created += 1; }
+        }
     }
     Ok(rep)
 }
@@ -235,5 +249,60 @@ mod tests {
         a.next = 900;
         run(&mut a, &result(vec![]));
         assert!(a.issues.iter().find(|i| i.number == 900).unwrap().open);
+    }
+
+    fn many(n: u32) -> Vec<Finding> { (0..n).map(|i| f("r", "a.java", i + 1, Severity::High)).collect() }
+
+    #[test]
+    fn surplus_part_is_closed_with_comment() {
+        let mut a = Fake::default();
+        let mut big = many(2000);
+        for x in &mut big { x.message = "x".repeat(100); }
+        run(&mut a, &result(big));
+        let parts = a.issues.iter().filter(|i| parse_state(&i.body).is_some_and(|s| s.key == K)).count();
+        assert!(parts > 1);
+        let rep = run(&mut a, &result(many(1)));
+        assert_eq!(rep.closed, parts - 1);
+        let closed: Vec<&Issue> = a.issues.iter().filter(|i| !i.open).collect();
+        assert_eq!(closed.len(), parts - 1);
+        for i in closed { assert!(a.comments.iter().any(|(n, _)| *n == i.number)); }
+    }
+
+    #[test]
+    fn blocked_surplus_part_stays_open() {
+        let mut a = Fake::default();
+        let mut big = many(2000);
+        for x in &mut big { x.message = "x".repeat(100); }
+        run(&mut a, &result(big));
+        let mut r = result(many(1));
+        r.unanalyzed = vec!["a.java".into()];
+        let rep = run(&mut a, &r);
+        assert_eq!(rep.closed, 0);
+        assert!(a.issues.iter().all(|i| i.open));
+    }
+
+    #[test]
+    fn ignored_summary_is_left_alone() {
+        let mut a = Fake::default();
+        run(&mut a, &result(vec![]));
+        let n = by_key(&a, SUMMARY_KEY).number;
+        let before = by_key(&a, SUMMARY_KEY);
+        let i = a.issues.iter_mut().find(|i| i.number == n).unwrap();
+        i.labels.push(IGNORED_LABEL.into());
+        a.calls = 0;
+        let mut r = result(vec![]);
+        r.commit = "other".into();
+        let rep = run(&mut a, &r);
+        assert_eq!(a.calls, 0);
+        assert_eq!(rep.updated, 0);
+        assert_eq!(by_key(&a, SUMMARY_KEY).body, before.body);
+    }
+
+    #[test]
+    fn empty_label_list_is_an_error() {
+        let mut a = Fake::default();
+        let mut r = result(vec![]);
+        r.publish.labels.clear();
+        assert!(sync(&mut a, &r, "http://g", "o/r").is_err());
     }
 }

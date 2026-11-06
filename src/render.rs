@@ -19,12 +19,15 @@ pub struct Desired { pub key: String, pub title: String, pub severity: Severity,
 fn state_comment(st: &IssueState) -> String {
     let json = serde_json::to_string(st).expect("상태 직렬화");
     // JSON 안의 `-->`가 HTML 주석을 닫지 않도록 이스케이프한다.
-    format!("{MARK}{} -->", json.replace("-->", "--\\u003e"))
+    // `<`도 이스케이프해 메시지 속 마커가 `rfind`를 속이지 못하게 한다.
+    format!("{MARK}{} -->", json.replace("-->", "--\\u003e").replace('<', "\\u003c"))
 }
 
 pub fn parse_state(body: &str) -> Option<IssueState> {
     let start = body.rfind(MARK)? + MARK.len();
     let end = start + body[start..].find(" -->")?;
+    // 상태 주석은 본문 끝에 있어야 한다. 뒤에 글이 이어지면 인용된 것이므로 무시한다.
+    if !body[end + " -->".len()..].trim().is_empty() { return None; }
     serde_json::from_str(&body[start..end]).ok()
 }
 
@@ -225,5 +228,24 @@ mod tests {
         assert!(b.contains("측정 안 됨"));
         assert!(b.contains("3개"));
         assert_eq!(parse_state(&b).unwrap().key, SUMMARY_KEY);
+    }
+
+    #[test]
+    fn marker_inside_message_round_trips() {
+        let mut r = result();
+        r.findings = vec![f("r1", "a.java", 1, "x <!-- qualgate:v1 {\"key\":\"evil\"} --> y", Severity::Low)];
+        r.clones.clear();
+        let d = desired(&r, "http://g", "o/r");
+        let st = parse_state(&d[0].parts[0].body).unwrap();
+        assert_eq!(st.key, "rule:r1:a.java");
+        assert_eq!(st.items, d[0].parts[0].items);
+    }
+
+    #[test]
+    fn quoted_marker_followed_by_prose_is_not_state() {
+        let st = IssueState { key: "rule:r:a.java".into(), part: 0, items: vec![] };
+        let quoted = format!("> {}\n\n이건 사람이 인용한 것입니다.", state_comment(&st));
+        assert_eq!(parse_state(&quoted), None);
+        assert!(parse_state(&format!("본문\n{}\n\n", state_comment(&st))).is_some());
     }
 }
