@@ -8,6 +8,7 @@ pub mod model;
 pub mod newcode;
 pub mod render;
 pub mod rules;
+pub mod scan;
 pub mod sync;
 pub mod track;
 pub mod vue;
