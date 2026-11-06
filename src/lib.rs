@@ -1,4 +1,5 @@
 pub mod config;
+pub mod coverage;
 pub mod fsutil;
 pub mod model;
 pub mod rules;

@@ -1,0 +1,3 @@
+mode: set
+example.com/m/pkg/a.go:3.10,5.2 2 1
+example.com/m/pkg/a.go:5.2,6.2 1 0
