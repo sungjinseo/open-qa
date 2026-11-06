@@ -3,9 +3,12 @@ pub mod coverage;
 pub mod dup;
 pub mod fsutil;
 pub mod gate;
+pub mod gitea;
 pub mod model;
 pub mod newcode;
+pub mod render;
 pub mod rules;
+pub mod sync;
 pub mod track;
 pub mod vue;
 
