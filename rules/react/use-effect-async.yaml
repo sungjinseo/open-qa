@@ -6,6 +6,8 @@ rules:
     paths:
       include: ["*.jsx", "*.tsx"]
     patterns:
+      - pattern: |
+          useEffect(...)
       - pattern-regex: 'useEffect\(\s*async\b'
     metadata:
       qualgate_id: react.use-effect-async

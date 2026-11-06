@@ -6,7 +6,9 @@ rules:
     paths:
       include: ["*.jsx", "*.tsx"]
     patterns:
-      - pattern-regex: '\bvar\s+[\w$\[{]'
+      - pattern: |
+          var $X = $V
+      - pattern-regex: '(?<![^\s;{(])var\s+[\w$\[{]'
     metadata:
       qualgate_id: react.var-declaration
       qualgate_severity: low

@@ -6,7 +6,9 @@ rules:
     paths:
       include: ["*.vue.ts", "*.vue.js"]
     patterns:
-      - pattern-regex: '\bvar\s+[\w$\[{]'
+      - pattern: |
+          var $X = $V
+      - pattern-regex: '(?<![^\s;{(])var\s+[\w$\[{]'
     metadata:
       qualgate_id: vue.var-declaration
       qualgate_severity: low

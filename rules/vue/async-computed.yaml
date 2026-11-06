@@ -6,6 +6,8 @@ rules:
     paths:
       include: ["*.vue.ts", "*.vue.js"]
     patterns:
+      - pattern: |
+          computed(...)
       - pattern-regex: 'computed\(\s*async\b'
     metadata:
       qualgate_id: vue.async-computed
