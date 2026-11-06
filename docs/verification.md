@@ -1,6 +1,6 @@
 # Environment verification (spec section 13, items 1-4)
 
-Measured 2026-11-06. Item 5 (detection quality) is done in Task 12.
+Measured 2026-11-06. Item 5 (detection quality): the Sonar duplication comparison is done, the internal repository check is pending (see below).
 
 | # | Item | Result |
 |---|------|--------|
@@ -8,7 +8,7 @@ Measured 2026-11-06. Item 5 (detection quality) is done in Task 12.
 | 2 | Grammar crates with `tree-sitter` | All 7 grammars parse with `tree-sitter = 0.27.1` (locked): java 0.23, kotlin-ng 1.1, python 0.25, javascript 0.25, typescript 0.23 (TS and TSX), go 0.25. `bash scripts/cargo.sh test grammars` passes. No downgrade needed. |
 | 3 | Gitea token scopes | Gitea 1.27.3 (image `gitea/gitea:1`). See below. |
 | 4 | Gitea issue body limit | 2,000,000-byte body accepted (201). 60,000, 500,000 and 1,000,000 also 201. `MAX_STATE_BYTES` = 40,000 is safe. |
-| - | Image size | `qualgate:dev` 132MB (target 150MB). |
+| - | Image size | `qualgate:dev` 148MB by `docker image ls` (target 150MB). Real filesystem is about 70MB; Docker Desktop's containerd store reports a larger number. Dropping `rules/tests` from the build context and stripping the release binary brought it from 153MB to 148MB. |
 
 ## Opengrep JSON
 
@@ -26,10 +26,54 @@ Measured 2026-11-06. Item 5 (detection quality) is done in Task 12.
 
 Issue PATCH (edit body) with `write:issue,read:repository`: 201 (Gitea 1.27 returns 201 on PATCH).
 
-Required scopes: `write:issue` is enough for create issue, create label, list/edit issues. Add `read:repository` only if the tool calls `GET /repos/{o}/{r}` itself. The brief's `write:issue,write:repository,read:user` set is more than needed.
+Measured end to end in Task 12 (`bash tests/gitea_it.sh`, real Gitea 1.27 container, real `qualgate publish`):
+
+| Token scopes | Result |
+|---|---|
+| `write:issue,read:repository` | Everything passes: create issues and labels, rerun with no API writes, edit body, comment, close, reopen, leave `qualgate:ignored` issues alone. |
+| `write:issue` only | `publish` fails with exit 2 and `Gitea 권한 오류 (403)`, because `publish` calls `GET /repos/{o}/{r}` to read the default branch and that needs `read:repository`. |
+
+Required scopes for `qualgate publish`: `write:issue` and `read:repository`. The earlier statement that `write:issue` alone is enough for editing was untested and is replaced by the table above: editing works, but the tool as a whole needs `read:repository` too. The brief's `write:issue,write:repository,read:user` set is more than needed.
 
 ## Deviations from the brief
 
 - Creating the fixture repo with the brief's token (`write:issue,write:repository,read:user`) failed: `POST /user/repos` requires `write:user`. Repo was created with basic auth (`qg` throwaway account) instead. Not a product requirement.
 - Replaced `sleep 15` with a `/api/healthz` poll. Gitea container bound to `127.0.0.1:3999` and removed afterward.
 - Extra body sizes (60KB, 500KB, 1MB) and an additional `write:issue,read:repository` token were probed.
+
+## Item 5: detection quality (Task 12)
+
+### Internal repository check
+
+Status: pending: needs an internal repository from the user. No repository path was provided, so no rule hit counts, false positive ratio (20 samples), timing or unanalyzed file count exist yet. Command to run, `scan` only, never `publish`:
+
+```bash
+git clone <internal repo url> <clone path>
+MSYS_NO_PATHCONV=1 docker run --rm --network none -v "<clone path>:/src:ro" -v "$PWD/.qualgate-out:/out" qualgate:dev scan
+```
+
+Then record per rule hit counts from `.qualgate-out/result.json`, the false positive ratio of 20 sampled findings, elapsed time, and `unanalyzed` count here. A rule above 30% false positives must be fixed or removed from the default pack.
+
+### E2E samples (`bash tests/e2e/run.sh`, `--network none`)
+
+One violation file, two clone files and one coverage report per language. All six pass: findings present, clone group present, coverage measured, no unanalyzed files.
+
+| Lang | Findings | Clone groups | Coverage | Duplication | Scan time (incl. container start) |
+|---|---|---|---|---|---|
+| java | 1 (`java.system-out`) | 1 | 50.0 | 85.1 | 11s |
+| kotlin | 3 | 1 | 50.0 | 82.4 | 11s |
+| python | 1 | 1 | 50.0 | 96.7 | 10s |
+| react | 1 | 1 | 50.0 | 91.9 | 8s |
+| vue | 1 | 1 | 50.0 | 73.9 | 29s (cargo test ran concurrently) |
+| go | 1 | 1 | 75.0 | 80.6 | 11s |
+
+### Duplication versus Sonar Community
+
+Sonar Community 26.11.0.134175 (loaded image, unmodified, `SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true` on Docker Desktop), scanner `sonarsource/sonar-scanner-cli` 8.3.1, project = `tests/e2e/repos/java` with `-Dsonar.sources=src`. Only the measures API was read. Container removed afterwards, image kept.
+
+| | Duplication | Duplicated lines / total lines |
+|---|---|---|
+| Sonar `duplicated_lines_density` | 77.8% | 70 / 90 (2 blocks, 2 files) |
+| qualgate `metrics.duplication` | 85.1% | 74 / 87 (Clone1.java 4-40, Clone2.java 4-40) |
+
+Difference 7.3 percentage points, under the 10 point threshold, so no deeper investigation. Both tools found exactly the two clone files and nothing else. Sonar's duplicated range covers 35 lines per file and counts 90 total lines, qualgate's covers 37 of 87 (`text.lines().count()`). The two-line difference per file is probably how the closing-brace lines of the last block and the line total are counted; not confirmed.

@@ -1,0 +1,25 @@
+name: qualgate
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 18 * * *"
+jobs:
+  qualgate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # 프로젝트의 테스트를 실행해 커버리지 리포트를 만드는 단계를 여기 둔다.
+      - name: scan
+        run: |
+          mkdir -p .qualgate-out && chmod 777 .qualgate-out
+          docker run --rm --network none -e QUALGATE_BRANCH="${{ github.ref_name }}" \
+            -v "$PWD:/src:ro" -v "$PWD/.qualgate-out:/out" registry.example.com/qualgate:latest scan
+      - name: publish
+        if: always()
+        run: |
+          docker run --rm -v "$PWD/.qualgate-out:/out:ro" \
+            -e GITEA_URL="${{ github.server_url }}" -e GITEA_TOKEN="${{ secrets.QUALGATE_TOKEN }}" \
+            registry.example.com/qualgate:latest publish --repo "${{ github.repository }}"
