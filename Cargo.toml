@@ -1,0 +1,26 @@
+[package]
+name = "qualgate"
+version = "0.1.0"
+edition = "2021"
+license = "LGPL-3.0-only"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+globset = "0.4"
+quick-xml = "0.42"
+rayon = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tempfile = "3"
+toml = "0.9"
+tree-sitter = "0.27"
+tree-sitter-go = "0.25"
+tree-sitter-java = "0.23"
+tree-sitter-javascript = "0.25"
+tree-sitter-kotlin-ng = "1.1"
+tree-sitter-python = "0.25"
+tree-sitter-typescript = "0.23"
+ureq = { version = "3", features = ["json", "platform-verifier"] }
+walkdir = "2"
