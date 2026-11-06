@@ -66,11 +66,32 @@ fn opengrep_failure_exits_2() {
     assert_eq!(st.code(), Some(2));
 }
 
+fn scanned_out() -> (tempfile::TempDir, tempfile::TempDir) {
+    let src = repo();
+    let out = tempfile::tempdir().unwrap();
+    let st = bin().args(["scan", "--src"]).arg(src.path()).arg("--out").arg(out.path())
+        .env("QUALGATE_RULES", rules_dir()).status().unwrap();
+    assert_eq!(st.code(), Some(1));
+    assert!(out.path().join("result.json").exists());
+    (src, out)
+}
+
 #[test]
 fn publish_without_token_exits_2() {
     let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
-    let out = tempfile::tempdir().unwrap();
-    let st = bin().args(["publish", "--repo", "o/r", "--out"]).arg(out.path())
-        .env_remove("GITEA_TOKEN").env("GITEA_URL", "http://127.0.0.1:9").status().unwrap();
-    assert_eq!(st.code(), Some(2));
+    let (_src, out) = scanned_out();
+    let o = bin().args(["publish", "--repo", "o/r", "--out"]).arg(out.path())
+        .env_remove("GITEA_TOKEN").env("GITEA_URL", "http://127.0.0.1:9").output().unwrap();
+    assert_eq!(o.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("GITEA_TOKEN"));
+}
+
+#[test]
+fn publish_without_url_exits_2() {
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let (_src, out) = scanned_out();
+    let o = bin().args(["publish", "--repo", "o/r", "--out"]).arg(out.path())
+        .env_remove("GITEA_URL").env("GITEA_TOKEN", "t").output().unwrap();
+    assert_eq!(o.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("GITEA_URL"));
 }
