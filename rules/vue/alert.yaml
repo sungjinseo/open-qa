@@ -1,0 +1,13 @@
+rules:
+  - id: vue.alert
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "alert는 UI를 막는 대화상자라 사용자 경험을 해칩니다. 토스트나 인라인 메시지 컴포넌트를 사용하세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    pattern: |
+      alert(...)
+    metadata:
+      qualgate_id: vue.alert
+      qualgate_severity: low
+      qualgate_category: maintainability

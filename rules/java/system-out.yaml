@@ -1,0 +1,11 @@
+rules:
+  - id: java.system-out
+    languages: [java]
+    severity: INFO
+    message: "System.out.println은 레벨과 형식을 제어할 수 없습니다. 로거를 사용하세요."
+    pattern: |
+      System.out.println(...)
+    metadata:
+      qualgate_id: java.system-out
+      qualgate_severity: low
+      qualgate_category: maintainability

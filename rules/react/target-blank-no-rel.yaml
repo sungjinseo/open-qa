@@ -1,0 +1,16 @@
+rules:
+  - id: react.target-blank-no-rel
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "target=\"_blank\" 링크에 rel이 없으면 새 창이 window.opener로 원본 페이지를 조작할 수 있습니다. rel=\"noopener noreferrer\"를 추가하세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    patterns:
+      - pattern: |
+          <a target="_blank" href=$H />
+      - pattern-not: |
+          <a ... rel=... />
+    metadata:
+      qualgate_id: react.target-blank-no-rel
+      qualgate_severity: medium
+      qualgate_category: security

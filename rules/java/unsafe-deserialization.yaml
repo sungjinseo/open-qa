@@ -1,0 +1,11 @@
+rules:
+  - id: java.unsafe-deserialization
+    languages: [java]
+    severity: ERROR
+    message: "신뢰할 수 없는 데이터를 ObjectInputStream으로 역직렬화하면 임의 코드 실행 위험이 있습니다. JSON 등 안전한 형식이나 ObjectInputFilter를 사용하세요."
+    pattern: |
+      new ObjectInputStream(...)
+    metadata:
+      qualgate_id: java.unsafe-deserialization
+      qualgate_severity: high
+      qualgate_category: security

@@ -1,0 +1,11 @@
+rules:
+  - id: go.panic-call
+    languages: [go]
+    severity: WARNING
+    message: "panic은 프로세스를 중단시키는 복구 어려운 오류 처리입니다. error를 반환해 호출자가 처리하게 하세요."
+    pattern: |
+      panic(...)
+    metadata:
+      qualgate_id: go.panic-call
+      qualgate_severity: medium
+      qualgate_category: reliability

@@ -1,0 +1,13 @@
+rules:
+  - id: react.inner-html
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "innerHTML에 값을 대입하면 XSS 위험이 있습니다. textContent를 사용하거나 입력을 정제하세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    pattern: |
+      $E.innerHTML = $V
+    metadata:
+      qualgate_id: react.inner-html
+      qualgate_severity: high
+      qualgate_category: security

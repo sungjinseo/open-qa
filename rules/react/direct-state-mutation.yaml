@@ -1,0 +1,13 @@
+rules:
+  - id: react.direct-state-mutation
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "this.state를 직접 변경하면 리렌더링이 일어나지 않습니다. setState를 사용하세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    pattern: |
+      this.state.$K = $V
+    metadata:
+      qualgate_id: react.direct-state-mutation
+      qualgate_severity: high
+      qualgate_category: bug

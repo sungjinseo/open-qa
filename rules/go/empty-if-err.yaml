@@ -1,0 +1,11 @@
+rules:
+  - id: go.empty-if-err
+    languages: [go]
+    severity: ERROR
+    message: "if err != nil 블록이 비어 있으면 오류를 확인만 하고 무시합니다. 에러를 반환하거나 처리하세요."
+    pattern: |
+      if err != nil { }
+    metadata:
+      qualgate_id: go.empty-if-err
+      qualgate_severity: high
+      qualgate_category: bug

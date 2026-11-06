@@ -1,0 +1,11 @@
+rules:
+  - id: python.yaml-unsafe-load
+    languages: [python]
+    severity: ERROR
+    message: "yaml.load는 기본 로더가 임의 객체를 생성해 코드 실행 위험이 있습니다. yaml.safe_load를 사용하세요."
+    pattern: |
+      yaml.load($X)
+    metadata:
+      qualgate_id: python.yaml-unsafe-load
+      qualgate_severity: high
+      qualgate_category: security

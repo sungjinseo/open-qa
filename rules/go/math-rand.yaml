@@ -1,0 +1,11 @@
+rules:
+  - id: go.math-rand
+    languages: [go]
+    severity: INFO
+    message: "math/rand는 예측 가능해 토큰이나 키 생성에 부적합합니다. crypto/rand를 사용하세요."
+    pattern: |
+      rand.Intn(...)
+    metadata:
+      qualgate_id: go.math-rand
+      qualgate_severity: low
+      qualgate_category: security

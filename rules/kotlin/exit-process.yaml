@@ -1,0 +1,11 @@
+rules:
+  - id: kotlin.exit-process
+    languages: [kotlin]
+    severity: WARNING
+    message: "exitProcess는 프로세스를 강제 종료해 정리 작업과 테스트를 방해합니다. 예외를 던지거나 종료 코드를 상위로 전달하세요."
+    pattern: |
+      exitProcess(...)
+    metadata:
+      qualgate_id: kotlin.exit-process
+      qualgate_severity: medium
+      qualgate_category: reliability

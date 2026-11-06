@@ -1,0 +1,11 @@
+rules:
+  - id: java.string-identity-compare
+    languages: [java]
+    severity: ERROR
+    message: "문자열을 ==로 비교하면 값이 아닌 참조를 비교합니다. equals()를 사용하세요."
+    pattern: |
+      $A == "..."
+    metadata:
+      qualgate_id: java.string-identity-compare
+      qualgate_severity: high
+      qualgate_category: bug

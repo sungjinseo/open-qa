@@ -1,0 +1,13 @@
+rules:
+  - id: react.dangerous-html
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "dangerouslySetInnerHTML은 검증되지 않은 HTML을 삽입해 XSS 위험이 있습니다. 텍스트로 렌더링하거나 DOMPurify로 정제하세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    pattern: |
+      <$T dangerouslySetInnerHTML=... />
+    metadata:
+      qualgate_id: react.dangerous-html
+      qualgate_severity: high
+      qualgate_category: security

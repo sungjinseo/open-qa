@@ -24,3 +24,7 @@ tree-sitter-python = "0.25"
 tree-sitter-typescript = "0.23"
 ureq = { version = "3", features = ["json", "platform-verifier"] }
 walkdir = "2"
+
+[dev-dependencies]
+serde_json = "1"
+tempfile = "3"

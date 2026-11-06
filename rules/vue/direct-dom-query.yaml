@@ -1,0 +1,13 @@
+rules:
+  - id: vue.direct-dom-query
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "document.querySelector로 DOM을 직접 조회하면 컴포넌트 경계를 넘어 결합됩니다. 템플릿 ref를 사용하세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    pattern: |
+      document.querySelector(...)
+    metadata:
+      qualgate_id: vue.direct-dom-query
+      qualgate_severity: low
+      qualgate_category: maintainability

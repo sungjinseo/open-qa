@@ -1,0 +1,15 @@
+rules:
+  - id: java.bigdecimal-from-double
+    languages: [java]
+    severity: WARNING
+    message: "double 리터럴로 BigDecimal을 만들면 부동소수점 오차가 그대로 들어갑니다. 문자열 생성자나 BigDecimal.valueOf를 사용하세요."
+    patterns:
+      - pattern: |
+          new BigDecimal($D)
+      - metavariable-regex:
+          metavariable: $D
+          regex: '^\d+\.\d+$'
+    metadata:
+      qualgate_id: java.bigdecimal-from-double
+      qualgate_severity: medium
+      qualgate_category: bug

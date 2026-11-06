@@ -1,0 +1,11 @@
+rules:
+  - id: python.exec
+    languages: [python]
+    severity: ERROR
+    message: "exec는 문자열을 코드로 실행해 임의 코드 실행 위험이 있습니다. 동적 실행을 제거하고 명시적 함수 호출로 바꾸세요."
+    pattern: |
+      exec(...)
+    metadata:
+      qualgate_id: python.exec
+      qualgate_severity: critical
+      qualgate_category: security

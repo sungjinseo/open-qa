@@ -1,0 +1,11 @@
+rules:
+  - id: kotlin.println
+    languages: [kotlin]
+    severity: INFO
+    message: "println은 레벨과 형식을 제어할 수 없습니다. 로거를 사용하세요."
+    pattern: |
+      println(...)
+    metadata:
+      qualgate_id: kotlin.println
+      qualgate_severity: low
+      qualgate_category: maintainability

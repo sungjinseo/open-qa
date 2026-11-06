@@ -1,0 +1,11 @@
+rules:
+  - id: go.weak-hash-md5
+    languages: [go]
+    severity: WARNING
+    message: "MD5는 충돌 공격에 취약해 보안 용도로 부적합합니다. sha256 이상을 사용하세요."
+    pattern: |
+      md5.New()
+    metadata:
+      qualgate_id: go.weak-hash-md5
+      qualgate_severity: medium
+      qualgate_category: security

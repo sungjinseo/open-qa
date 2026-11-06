@@ -1,0 +1,11 @@
+rules:
+  - id: python.flask-debug
+    languages: [python]
+    severity: ERROR
+    message: "debug=True로 서버를 실행하면 원격 코드 실행이 가능한 디버거가 노출됩니다. 운영에서는 디버그를 끄세요."
+    pattern: |
+      $A.run(..., debug=True, ...)
+    metadata:
+      qualgate_id: python.flask-debug
+      qualgate_severity: high
+      qualgate_category: security

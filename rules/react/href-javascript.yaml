@@ -1,0 +1,17 @@
+rules:
+  - id: react.href-javascript
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "javascript: URL은 클릭 시 스크립트를 실행해 XSS 위험이 있습니다. onClick 핸들러나 실제 URL을 사용하세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    patterns:
+      - pattern: |
+          <a href=$H />
+      - metavariable-regex:
+          metavariable: $H
+          regex: '^["'']javascript:'
+    metadata:
+      qualgate_id: react.href-javascript
+      qualgate_severity: high
+      qualgate_category: security

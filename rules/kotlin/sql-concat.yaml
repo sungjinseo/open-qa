@@ -1,0 +1,11 @@
+rules:
+  - id: kotlin.sql-concat
+    languages: [kotlin]
+    severity: ERROR
+    message: "SQL을 문자열 연결로 만들면 SQL 인젝션 위험이 있습니다. PreparedStatement의 파라미터 바인딩을 사용하세요."
+    pattern: |
+      $S.executeQuery("..." + $X)
+    metadata:
+      qualgate_id: kotlin.sql-concat
+      qualgate_severity: high
+      qualgate_category: security

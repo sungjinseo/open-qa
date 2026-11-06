@@ -1,0 +1,13 @@
+rules:
+  - id: vue.mutate-props
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "props를 직접 변경하면 단방향 데이터 흐름이 깨지고 Vue가 경고합니다. emit으로 부모에게 변경을 요청하세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    pattern: |
+      props.$K = $V
+    metadata:
+      qualgate_id: vue.mutate-props
+      qualgate_severity: high
+      qualgate_category: bug

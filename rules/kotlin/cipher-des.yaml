@@ -1,0 +1,11 @@
+rules:
+  - id: kotlin.cipher-des
+    languages: [kotlin]
+    severity: ERROR
+    message: "DES는 키 길이가 짧아 쉽게 해독됩니다. AES-GCM 같은 현대적 알고리즘을 사용하세요."
+    pattern: |
+      Cipher.getInstance("DES")
+    metadata:
+      qualgate_id: kotlin.cipher-des
+      qualgate_severity: high
+      qualgate_category: security

@@ -1,0 +1,13 @@
+rules:
+  - id: vue.window-location-concat
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "문자열을 이어 붙여 location을 바꾸면 오픈 리다이렉트나 javascript: 인젝션 위험이 있습니다. URL을 검증하거나 라우터를 사용하세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    pattern: |
+      window.location.href = "..." + $X
+    metadata:
+      qualgate_id: vue.window-location-concat
+      qualgate_severity: medium
+      qualgate_category: security

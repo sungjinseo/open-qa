@@ -1,0 +1,12 @@
+rules:
+  - id: python.mutable-default-dict
+    languages: [python]
+    severity: WARNING
+    message: "딕셔너리 기본 인자는 호출 간에 공유되어 값이 누적됩니다. None을 기본값으로 쓰고 함수 안에서 생성하세요."
+    pattern: |
+      def $F(..., $A={}, ...):
+          ...
+    metadata:
+      qualgate_id: python.mutable-default-dict
+      qualgate_severity: medium
+      qualgate_category: bug

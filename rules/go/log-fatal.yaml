@@ -1,0 +1,11 @@
+rules:
+  - id: go.log-fatal
+    languages: [go]
+    severity: INFO
+    message: "log.Fatal은 defer를 실행하지 않고 프로세스를 즉시 종료합니다. main에서만 쓰거나 error를 반환하세요."
+    pattern: |
+      log.Fatal(...)
+    metadata:
+      qualgate_id: go.log-fatal
+      qualgate_severity: low
+      qualgate_category: reliability

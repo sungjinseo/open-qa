@@ -1,0 +1,17 @@
+rules:
+  - id: go.goroutine-loop-var
+    languages: [go]
+    severity: WARNING
+    message: "고루틴 클로저가 반복 변수를 직접 참조하면 모든 고루틴이 같은 값을 볼 수 있습니다. 인자로 값을 전달하세요."
+    pattern: |
+      for $I := range $C {
+        go func() {
+          ...
+          $F(..., $I, ...)
+          ...
+        }()
+      }
+    metadata:
+      qualgate_id: go.goroutine-loop-var
+      qualgate_severity: medium
+      qualgate_category: bug

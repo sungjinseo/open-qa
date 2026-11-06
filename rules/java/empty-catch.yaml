@@ -1,0 +1,11 @@
+rules:
+  - id: java.empty-catch
+    languages: [java]
+    severity: WARNING
+    message: "빈 catch 블록은 예외를 조용히 삼켜 장애 원인을 숨깁니다. 로깅하거나 처리하거나 다시 던지세요."
+    pattern: |
+      try { ... } catch ($T $E) { }
+    metadata:
+      qualgate_id: java.empty-catch
+      qualgate_severity: medium
+      qualgate_category: reliability
