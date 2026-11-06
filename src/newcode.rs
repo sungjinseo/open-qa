@@ -16,6 +16,8 @@ pub fn parse_diff(diff: &str) -> ChangedLines {
     let mut file: Option<String> = None;
     for line in diff.lines() {
         if let Some(p) = line.strip_prefix("+++ ") {
+            // git appends a tab after paths that contain a space.
+            let p = p.strip_suffix('\t').unwrap_or(p);
             file = p.strip_prefix("b/").map(str::to_string);
         } else if line.starts_with("@@") {
             let Some(f) = &file else { continue };
@@ -38,7 +40,10 @@ pub fn changed(src: &Path, days: u32) -> Result<Option<ChangedLines>> {
     let base = git(src, &["rev-list", "-1", &before, "HEAD"])?;
     let base = base.trim();
     if base.is_empty() { return Ok(None); }
-    let diff = git(src, &["diff", "-U0", base, "HEAD"])?;
+    let diff = git(src, &["-c", "core.quotepath=false", "diff", "-U0", "--no-color", "--no-ext-diff", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/", base, "HEAD"])?;
+    // git still quotes paths with control characters, quotes or backslashes. Those hunks
+    // cannot be mapped to a file name, so report unmeasured rather than undercount.
+    if diff.lines().any(|l| l.starts_with("+++ \"")) { return Ok(None); }
     Ok(Some(parse_diff(&diff)))
 }
 
@@ -87,6 +92,41 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         Command::new("git").current_dir(d.path()).args(["init", "-qb", "main"]).status().unwrap();
         commit(d.path(), "a.txt", "1\n", "2099-01-01T00:00:00");
+        assert_eq!(changed(d.path(), 30).unwrap(), None);
+    }
+
+    #[test]
+    fn parses_path_with_space_and_trailing_tab() {
+        let d = "diff --git a/my file.txt b/my file.txt\n--- a/my file.txt\n+++ b/my file.txt\t\n@@ -0,0 +1 @@\n+x\n";
+        let c = parse_diff(d);
+        assert_eq!(c["my file.txt"].iter().copied().collect::<Vec<_>>(), vec![1]);
+    }
+
+    fn repo_with_changed_file(name: &str) -> tempfile::TempDir {
+        let d = tempfile::tempdir().unwrap();
+        Command::new("git").current_dir(d.path()).args(["init", "-qb", "main"]).status().unwrap();
+        commit(d.path(), name, "1\n2\n", "2000-01-01T00:00:00");
+        commit(d.path(), name, "1\n2\n3\n", "2099-01-01T00:00:00");
+        d
+    }
+
+    #[test]
+    fn changed_handles_non_ascii_path() {
+        let d = repo_with_changed_file("한글.txt");
+        let c = changed(d.path(), 30).unwrap().unwrap();
+        assert_eq!(c["한글.txt"].iter().copied().collect::<Vec<_>>(), vec![3]);
+    }
+
+    #[test]
+    fn changed_handles_path_with_space() {
+        let d = repo_with_changed_file("my file.txt");
+        let c = changed(d.path(), 30).unwrap().unwrap();
+        assert_eq!(c["my file.txt"].iter().copied().collect::<Vec<_>>(), vec![3]);
+    }
+
+    #[test]
+    fn quoted_path_is_unmeasured() {
+        let d = repo_with_changed_file("q\"x.txt");
         assert_eq!(changed(d.path(), 30).unwrap(), None);
     }
 
