@@ -13,6 +13,7 @@ rules:
       - pattern: $REQ.headers
       - pattern: searchParams.get(...)
       - pattern: $U.searchParams.get(...)
+      - pattern: $R.nextUrl.searchParams.get(...)
       - pattern: new URLSearchParams(...).get(...)
       - patterns:
           - pattern: $SP.get(...)

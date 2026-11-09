@@ -19,18 +19,28 @@ rules:
               - pattern: execSync($CMD, ...)
           - pattern-either:
               - pattern-inside: |
-                  import {..., exec, ...} from "child_process";
+                  import {..., exec, ...} from "$MOD";
                   ...
               - pattern-inside: |
-                  import {..., execSync, ...} from "child_process";
+                  import {..., execSync, ...} from "$MOD";
                   ...
               - pattern-inside: |
-                  const {..., exec, ...} = require("child_process");
+                  const {..., exec, ...} = require("$MOD");
                   ...
               - pattern-inside: |
-                  const {..., execSync, ...} = require("child_process");
+                  const {..., execSync, ...} = require("$MOD");
                   ...
+          - metavariable-regex:
+              metavariable: $MOD
+              regex: ^(node:)?child_process$
           - pattern-not: $F("...", ...)
+      - patterns:
+          - pattern-either:
+              - pattern: require("$MOD").exec($CMD, ...)
+              - pattern: require("$MOD").execSync($CMD, ...)
+          - metavariable-regex:
+              metavariable: $MOD
+              regex: ^(node:)?child_process$
       - pattern: '$CP.spawn($CMD, $ARGS, {..., shell: true, ...})'
     metadata:
       qualgate_id: ts.os-command

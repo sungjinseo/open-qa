@@ -4,3 +4,7 @@ export async function proxy(req: Request, res: Response) {
   const r = await fetch(target);
   res.send(await r.text());
 }
+export async function nextProxy(req: NextRequest) {
+  const target = req.nextUrl.searchParams.get("url") as string;
+  return fetch(target);
+}

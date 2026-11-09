@@ -10,3 +10,17 @@ func Fetch(w http.ResponseWriter, r *http.Request) {
 	resp, _ := http.Get(target)
 	io.Copy(w, resp.Body)
 }
+
+func ViaParam(c *http.Client, r *http.Request) {
+	c.Get(r.URL.Query().Get("url"))
+}
+
+func ViaLocal(r *http.Request) {
+	client := &http.Client{}
+	client.Get(r.URL.Query().Get("url"))
+}
+
+func ViaVar(r *http.Request) {
+	var c http.Client
+	c.Get(r.URL.Query().Get("url"))
+}

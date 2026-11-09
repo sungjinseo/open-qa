@@ -24,7 +24,27 @@ rules:
               - pattern: http.NewRequestWithContext($C, $M, $U, ...)
               - pattern: http.Head($U)
               - pattern: http.DefaultClient.Get($U)
-              - pattern: ($CL *http.Client).Get($U)
+          - focus-metavariable: $U
+      - patterns:
+          - pattern: $CL.Get($U)
+          - pattern-either:
+              - pattern-inside: |
+                  func $F(..., $CL *http.Client, ...) {...}
+              - pattern-inside: |
+                  $CL := &http.Client{...}
+                  ...
+              - pattern-inside: |
+                  $CL := http.Client{...}
+                  ...
+              - pattern-inside: |
+                  var $CL http.Client
+                  ...
+              - pattern-inside: |
+                  var $CL *http.Client
+                  ...
+              - pattern-inside: |
+                  var $CL = &http.Client{...}
+                  ...
           - focus-metavariable: $U
     pattern-sanitizers:
       - pattern: assertAllowedHost(...)

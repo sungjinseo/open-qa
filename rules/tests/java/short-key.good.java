@@ -6,6 +6,7 @@ class KeyMaker {
         g.initialize(3072);
         KeyPairGenerator ec = KeyPairGenerator.getInstance("EC");
         ec.initialize(256);
+        KeyPairGenerator.getInstance("RSA").initialize(4096);
         pool.initialize(10);
     }
     interface Pool { void initialize(int n); }
