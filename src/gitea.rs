@@ -79,12 +79,26 @@ fn encode_path(s: &str) -> String {
     s.split('/').map(encode_query).collect::<Vec<_>>().join("/")
 }
 
-pub(crate) fn contents_url(base: &str, repo: &str, path: &str, git_ref: &str) -> String {
-    format!("{}/api/v1/repos/{}/contents/{}?ref={}", base.trim_end_matches('/'), repo, encode_path(path), encode_query(git_ref))
+/// 경로 조각이 모두 비어 있지 않고 `.`/`..`이 아닌지.
+fn safe_segments(s: &str) -> bool {
+    s.split('/').all(|seg| !seg.is_empty() && seg != "." && seg != "..")
 }
 
-pub(crate) fn latest_commit_url(base: &str, repo: &str, git_ref: &str) -> String {
-    format!("{}/api/v1/repos/{}/commits?sha={}&limit=1", base.trim_end_matches('/'), repo, encode_query(git_ref))
+/// 저장소 이름은 `owner/name` 두 조각이어야 하고 `.`, `..`, 빈 조각을 허용하지 않는다.
+pub(crate) fn check_repo(repo: &str) -> Result<()> {
+    if repo.split('/').count() != 2 || !safe_segments(repo) { bail!("저장소 이름은 owner/repo 형식이어야 합니다: {repo}"); }
+    Ok(())
+}
+
+pub(crate) fn contents_url(base: &str, repo: &str, path: &str, git_ref: &str) -> Result<String> {
+    check_repo(repo)?;
+    if !safe_segments(path) { bail!("파일 경로에 빈 조각이나 '.', '..'을 쓸 수 없습니다: {path}"); }
+    Ok(format!("{}/api/v1/repos/{}/contents/{}?ref={}", base.trim_end_matches('/'), repo, encode_path(path), encode_query(git_ref)))
+}
+
+pub(crate) fn latest_commit_url(base: &str, repo: &str, git_ref: &str) -> Result<String> {
+    check_repo(repo)?;
+    Ok(format!("{}/api/v1/repos/{}/commits?sha={}&limit=1", base.trim_end_matches('/'), repo, encode_query(git_ref)))
 }
 
 /// contents API의 파일 응답(JSON 객체, base64 `content`)에서 내용과 sha를 꺼낸다.
@@ -108,7 +122,7 @@ impl Client {
 
     /// 파일 내용과 blob sha. 파일이 없으면(404) None.
     pub fn get_file(&mut self, repo: &str, path: &str, git_ref: &str) -> Result<Option<(Vec<u8>, String)>> {
-        let url = contents_url(&self.base, repo, path, git_ref);
+        let url = contents_url(&self.base, repo, path, git_ref)?;
         match self.call_opt("GET", &url, None, true)? {
             None => Ok(None),
             Some(v) => parse_file(&v).map(Some).with_context(|| format!("파일 응답 해석 실패: {repo}/{path}")),
@@ -117,7 +131,7 @@ impl Client {
 
     /// 브랜치(또는 ref)의 최신 커밋 sha.
     pub fn latest_commit(&mut self, repo: &str, git_ref: &str) -> Result<String> {
-        let url = latest_commit_url(&self.base, repo, git_ref);
+        let url = latest_commit_url(&self.base, repo, git_ref)?;
         let v = self.call("GET", &url, None)?;
         parse_latest_commit(&v)
     }
@@ -266,10 +280,21 @@ mod tests {
     #[test]
     fn contents_and_commit_urls_are_assembled_and_encoded() {
         assert_eq!(
-            contents_url("https://g.example/", "qg/cfg", "projects/a b/app.toml", "feature/x"),
+            contents_url("https://g.example/", "qg/cfg", "projects/a b/app.toml", "feature/x").unwrap(),
             "https://g.example/api/v1/repos/qg/cfg/contents/projects/a%20b/app.toml?ref=feature%2Fx"
         );
-        assert_eq!(latest_commit_url("https://g.example", "qg/cfg", "main"), "https://g.example/api/v1/repos/qg/cfg/commits?sha=main&limit=1");
+        assert_eq!(latest_commit_url("https://g.example", "qg/cfg", "main").unwrap(), "https://g.example/api/v1/repos/qg/cfg/commits?sha=main&limit=1");
+    }
+
+    #[test]
+    fn dot_dot_and_empty_segments_are_rejected() {
+        for repo in ["qg/..", "../cfg", "qg//cfg", "qg", "qg/cfg/x", "/cfg", "qg/."] {
+            assert!(contents_url("https://g.example", repo, "qualgate.toml", "main").is_err(), "{repo}");
+            assert!(latest_commit_url("https://g.example", repo, "main").is_err(), "{repo}");
+        }
+        for path in ["../x.toml", "projects/../x.toml", "projects//x.toml", "", "a/", "./a"] {
+            assert!(contents_url("https://g.example", "qg/cfg", path, "main").is_err(), "{path:?}");
+        }
     }
 
     #[test]

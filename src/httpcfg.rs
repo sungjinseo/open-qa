@@ -37,6 +37,26 @@ fn host_key(url: &str) -> Option<(String, String, u16)> {
     Some((scheme, host.to_ascii_lowercase(), port.unwrap_or(default)))
 }
 
+/// 정규화한 origin(`scheme://host[:port]`, 소문자 host, 기본 포트 생략, IPv6는 대괄호, userinfo 제거)과
+/// 끝 `/`를 뗀 경로. 클론 URL, 토큰 헤더 범위, credential store 줄이 모두 이 값을 쓴다.
+fn normalized_base(url: &str) -> Option<(String, String)> {
+    let (scheme, host, port) = host_key(url)?;
+    let host = if host.contains(':') { format!("[{host}]") } else { host };
+    let default = if scheme == "https" { 443 } else { 80 };
+    let hostport = if port == default { host } else { format!("{host}:{port}") };
+    let rest = url.trim().split_once("://")?.1;
+    let path = rest.find(['/', '?', '#']).map_or("", |i| &rest[i..]);
+    let path = path.split(['?', '#']).next().unwrap_or("").trim_end_matches('/');
+    Some((format!("{scheme}://{hostport}"), path.to_string()))
+}
+
+/// `<GITEA_URL>/<owner>/<repo>.git`. credential store 줄과 같은 정규화 값으로 만든다.
+pub fn clone_url(gitea_url: &str, repo: &str) -> Result<String> {
+    crate::gitea::check_repo(repo)?;
+    let (origin, base_path) = normalized_base(gitea_url).context("GITEA_URL 형식이 올바르지 않습니다(http 또는 https)")?;
+    Ok(format!("{origin}{base_path}/{repo}.git"))
+}
+
 fn percent_decode(s: &str) -> Option<String> {
     let b = s.as_bytes();
     let mut out = Vec::with_capacity(b.len());
@@ -65,13 +85,14 @@ fn percent_encode_userinfo(s: &str) -> String {
     out
 }
 
-/// `.git-credentials` 내용에서 `gitea_url`과 호스트(포트 포함)가 같은 첫 줄의 사용자·비밀번호.
+/// `.git-credentials` 내용에서 `gitea_url`과 scheme·호스트·포트가 같은 첫 줄의 사용자·비밀번호.
+/// (https 줄의 비밀번호를 http 주소로 보내지 않는다.)
 fn find_credentials(content: &str, gitea_url: &str) -> Option<Auth> {
-    let (_, host, port) = host_key(gitea_url)?;
+    let key = host_key(gitea_url)?;
     for line in content.lines() {
         let line = line.trim();
-        let Some((_, h, p)) = host_key(line) else { continue };
-        if h != host || p != port { continue; }
+        let Some(k) = host_key(line) else { continue };
+        if k != key { continue; }
         let (_, rest) = line.split_once("://")?;
         let authority = rest.split(['/', '?', '#']).next()?;
         let Some((userinfo, _)) = authority.rsplit_once('@') else { continue };
@@ -85,8 +106,10 @@ fn find_credentials(content: &str, gitea_url: &str) -> Option<Auth> {
 
 /// `GITEA_TOKEN` 우선, 없으면 `QUALGATE_GIT_CREDENTIALS` 파일에서 찾는다.
 pub fn resolve_auth(gitea_url: &str) -> Result<Auth> {
-    if let Ok(t) = std::env::var("GITEA_TOKEN") {
-        if !t.is_empty() { return Ok(Auth::Token(t)); }
+    match std::env::var("GITEA_TOKEN") {
+        Ok(t) if !t.is_empty() => return Ok(Auth::Token(t)),
+        Err(std::env::VarError::NotUnicode(_)) => bail!("GITEA_TOKEN 값이 UTF-8 문자열이 아닙니다"),
+        _ => {}
     }
     let none = || anyhow!("Gitea 자격 증명이 없습니다. GITEA_TOKEN 또는 QUALGATE_GIT_CREDENTIALS(GITEA_URL과 호스트가 같은 줄이 있는 파일)를 지정하세요");
     let Some(path) = std::env::var_os("QUALGATE_GIT_CREDENTIALS").filter(|p| !p.is_empty()) else { return Err(none()) };
@@ -199,28 +222,26 @@ pub fn git_env(auth: &Auth, gitea_url: &str, workdir: &Path) -> Result<GitEnv> {
     if let Some(ca) = ca_file() { add("http.sslCAInfo", ca.to_string_lossy().into_owned()); }
     if !ssl_verify()? { add("http.sslVerify", "false".into()); }
     let mut store = None;
+    let (origin, base_path) = normalized_base(gitea_url).context("GITEA_URL 형식이 올바르지 않습니다(http 또는 https)")?;
+    // 사용자·시스템에 설정된 credential helper를 비운다(우리가 준 인증만 쓰게).
+    add("credential.helper", String::new());
     match auth {
         Auth::Token(t) => {
             // Gitea 주소에만 보낸다(리다이렉트 등 다른 호스트로 새지 않게).
-            let scope = format!("{}/", gitea_url.trim_end_matches('/'));
-            add(&format!("http.{scope}.extraHeader"), format!("Authorization: token {t}"));
+            add(&format!("http.{origin}{base_path}/.extraHeader"), format!("Authorization: token {t}"));
         }
         Auth::Basic { user, pass } => {
-            let (scheme, host, port) = host_key(gitea_url).context("GITEA_URL 형식이 올바르지 않습니다")?;
             let mut f = tempfile::Builder::new().prefix(".qualgate-cred-").tempfile_in(workdir).context("credential 임시 파일 생성 실패")?;
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
                 f.as_file().set_permissions(std::fs::Permissions::from_mode(0o600)).context("credential 임시 파일 권한 설정 실패")?;
             }
-            let host = if host.contains(':') { format!("[{host}]") } else { host };
-            let default = if scheme == "https" { 443 } else { 80 };
-            let hostport = if port == default { host } else { format!("{host}:{port}") };
-            writeln!(f, "{scheme}://{}:{}@{hostport}", percent_encode_userinfo(user), percent_encode_userinfo(pass))
-                .context("credential 임시 파일 쓰기 실패")?;
+            // 클론 URL(`clone_url`)과 같은 정규화 authority여야 git이 이 줄을 고른다.
+            let userinfo = format!("://{}:{}@", percent_encode_userinfo(user), percent_encode_userinfo(pass));
+            writeln!(f, "{}", origin.replacen("://", &userinfo, 1)).context("credential 임시 파일 쓰기 실패")?;
             f.flush().context("credential 임시 파일 쓰기 실패")?;
             let path = f.into_temp_path();
-            add("credential.helper", String::new());
             add("credential.helper", format!("store --file={}", shell_quote(&path.to_string_lossy())?));
             store = Some(path);
         }
@@ -430,8 +451,60 @@ mod tests {
         let env = git_env(&Auth::Token(t.clone()), "https://gitea.example/", dir.path()).unwrap();
         let pairs = cfg_pairs(&env);
         assert!(pairs.contains(&("http.https://gitea.example/.extraHeader".into(), format!("Authorization: token {t}"))));
-        assert!(!pairs.iter().any(|(k, _)| k.starts_with("credential") || k == "http.sslVerify" || k == "http.sslCAInfo"));
+        // 사용자·시스템 credential helper가 끼어들지 않도록 비운다(값 없는 항목 하나뿐).
+        let helpers: Vec<_> = pairs.iter().filter(|(k, _)| k.starts_with("credential")).collect();
+        assert_eq!(helpers, vec![&("credential.helper".to_string(), String::new())]);
+        assert!(!pairs.iter().any(|(k, _)| k == "http.sslVerify" || k == "http.sslCAInfo"));
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
         assert!(!format!("{env:?}").contains(&t));
+    }
+
+    #[test]
+    fn credentials_line_must_match_scheme() {
+        let _g = env_lock();
+        // 같은 호스트·포트라도 https 줄의 비밀번호를 http 주소에 보내지 않는다.
+        let f = creds_file("https://a:b@gitea.example:80\nhttp://c:d@gitea.example:443\n");
+        std::env::set_var("QUALGATE_GIT_CREDENTIALS", f.path());
+        assert!(resolve_auth("http://gitea.example").is_err());
+        assert!(resolve_auth("https://gitea.example").is_err());
+        let f = creds_file("https://a:b@gitea.example\nhttp://c:d@gitea.example\n");
+        std::env::set_var("QUALGATE_GIT_CREDENTIALS", f.path());
+        assert_eq!(resolve_auth("http://gitea.example").unwrap(), Auth::Basic { user: "c".into(), pass: "d".into() });
+        assert_eq!(resolve_auth("HTTPS://gitea.example").unwrap(), Auth::Basic { user: "a".into(), pass: "b".into() });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_utf8_token_is_an_error() {
+        use std::os::unix::ffi::OsStrExt;
+        let _g = env_lock();
+        let f = creds_file("https://a:b@gitea.example\n");
+        std::env::set_var("QUALGATE_GIT_CREDENTIALS", f.path());
+        std::env::set_var("GITEA_TOKEN", std::ffi::OsStr::from_bytes(&[b't', 0xff]));
+        let e = resolve_auth("https://gitea.example").unwrap_err().to_string();
+        assert!(e.contains("GITEA_TOKEN"), "{e}");
+    }
+
+    #[test]
+    fn clone_url_and_store_line_share_the_normalized_authority() {
+        let _g = env_lock();
+        for (base, origin, clone) in [
+            ("HTTPS://Gitea.Example:443/", "https://gitea.example", "https://gitea.example/o/r.git"),
+            ("https://u@gitea.example:8443/sub/", "https://gitea.example:8443", "https://gitea.example:8443/sub/o/r.git"),
+            ("http://[::1]:80", "http://[::1]", "http://[::1]/o/r.git"),
+        ] {
+            assert_eq!(clone_url(base, "o/r").unwrap(), clone);
+            let dir = tempfile::tempdir().unwrap();
+            let env = git_env(&Auth::Basic { user: "u".into(), pass: "p".into() }, base, dir.path()).unwrap();
+            let pairs = cfg_pairs(&env);
+            let file = pairs.iter().rfind(|(k, _)| k == "credential.helper").unwrap().1
+                .strip_prefix("store --file='").unwrap().strip_suffix('\'').unwrap().to_string();
+            assert_eq!(std::fs::read_to_string(&file).unwrap(), format!("{}\n", origin.replacen("://", "://u:p@", 1)));
+            assert!(clone.starts_with(&format!("{origin}/")));
+        }
+        for bad in ["../r", "o/..", "o//r", "o", "o/r/x", "o/./r"] {
+            assert!(clone_url("https://gitea.example", bad).is_err(), "{bad}");
+        }
+        assert!(clone_url("ftp://gitea.example", "o/r").is_err());
     }
 }
