@@ -4,11 +4,8 @@ rules:
     severity: ERROR
     message: "[행안부 IV-02 코드 삽입] 템플릿 본문을 변수로 만들어 Parse합니다. 입력값이 템플릿 문법으로 해석되어 데이터 유출이나 메서드 호출이 가능합니다(SSTI). 템플릿은 고정 문자열·파일로 두고 값은 데이터로 넘기세요."
     patterns:
-      - pattern: $T.Parse($X)
-      - pattern-not: $T.Parse("...")
-      - pattern-inside: |
-          import "text/template"
-          ...
+      - pattern: template.New($N).Parse($X)
+      - pattern-not: template.New($N).Parse("...")
     metadata:
       qualgate_id: go.template-parse-nonliteral
       qualgate_severity: high

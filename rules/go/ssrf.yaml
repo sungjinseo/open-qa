@@ -21,7 +21,10 @@ rules:
               - pattern: http.Get($U)
               - pattern: http.Post($U, ...)
               - pattern: http.NewRequest($M, $U, ...)
-              - pattern: $CL.Get($U)
+              - pattern: http.NewRequestWithContext($C, $M, $U, ...)
+              - pattern: http.Head($U)
+              - pattern: http.DefaultClient.Get($U)
+              - pattern: ($CL *http.Client).Get($U)
           - focus-metavariable: $U
     pattern-sanitizers:
       - pattern: assertAllowedHost(...)

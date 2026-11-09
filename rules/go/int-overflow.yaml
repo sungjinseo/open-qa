@@ -2,7 +2,7 @@ rules:
   - id: go.int-overflow
     languages: [go]
     severity: INFO
-    message: "[행안부 IV-14 정수형 오버플로우] 정수 곱셈 결과를 할당 크기로 쓰거나 int를 더 작은 정수형으로 변환합니다. 값이 클 때 오버플로우로 음수·작은 값이 되어 버퍼가 잘못 만들어집니다. 범위를 먼저 검증하고 math/bits·math.MaxInt32 비교를 쓰세요."
+    message: "[행안부 IV-14 정수형 오버플로우] strconv.Atoi로 읽은 int를 int32·uint8·uint16 같은 더 작은 정수형으로 범위 검사 없이 변환합니다. 값이 크면 잘려서(오버플로우) 의도와 다른 값이 됩니다. strconv.ParseUint(s, 10, 16)처럼 비트 크기를 지정하거나 변환 전에 범위를 검증하세요."
     pattern-either:
       - pattern: |
           $N, $E := strconv.Atoi($S)

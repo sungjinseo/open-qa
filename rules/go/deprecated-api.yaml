@@ -2,7 +2,7 @@ rules:
   - id: go.deprecated-api
     languages: [go]
     severity: INFO
-    message: "[행안부 AM-02 취약한 API 사용] 안전하지 않아 폐기된 암호 API를 씁니다(x509.DecryptPEMBlock, rsa.EncryptPKCS1v15 등). 취약한 암호화나 패딩 오라클 공격으로 이어집니다. 현대적인 PKCS#8 + AES-GCM, OAEP 방식을 쓰세요."
+    message: "[행안부 AM-02 취약한 API 사용] 사용이 권장되지 않는 암호 API를 씁니다(x509.DecryptPEMBlock은 폐기됨, rsa.EncryptPKCS1v15·DecryptPKCS1v15는 패딩 오라클 공격에 취약해 권장되지 않음). 현대적인 PKCS#8 + AES-GCM, OAEP 방식을 쓰세요."
     pattern-either:
       - pattern: x509.DecryptPEMBlock(...)
       - pattern: x509.IsEncryptedPEMBlock(...)
