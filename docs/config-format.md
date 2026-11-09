@@ -23,7 +23,12 @@ projects/<owner>/<repo>.toml    프로젝트 하나 = 파일 하나
 - 룰셋 이름은 `^[a-z0-9][a-z0-9-]{0,62}$`이고 파일 이름(확장자 제외)과 같아야 한다.
 - 프로젝트 파일 경로는 Gitea 저장소 전체 이름(`owner/repo`)과 같아야 하며, 파일 안의 `repo` 값과도 같아야 한다.
 - 모든 파일에 `schema = 1`이 있어야 한다. 모르는 키는 오류다.
-- `rulesets/`, `projects/`, 그리고 `projects/<owner>/` 안에서 점으로 시작하는 파일(`.gitkeep` 등)과 `.md` 파일(README)은 설정이 아니므로 무시한다. 그 밖의 예상하지 못한 항목과 심볼릭 링크는 오류다.
+- `rulesets/`, `projects/`, `projects/<owner>/` 디렉터리 안에서는 다음 항목을 설정으로 읽지 않고 무시한다.
+  - 이름이 점으로 시작하는 파일과 디렉터리(`.gitkeep`, `.github` 등).
+  - 이름이 `.md`로 끝나는 **파일**(README 등). `.md`로 끝나는 디렉터리는 무시하지 않는다.
+- 위 디렉터리 안의 그 밖의 항목은 오류다: 예상하지 못한 이름이나 종류, 심볼릭 링크(상위 디렉터리가 링크인 경우 포함), UTF-8이 아닌 파일 이름.
+- 디렉터리가 없으면 비어 있는 것으로 본다. 심볼릭 링크는 따라가지 않는다.
+- 소유자·저장소 이름은 영문자, 숫자, `-`, `_`, `.`만 쓸 수 있고 `.`과 `..`은 안 된다.
 - `default_ruleset`이나 프로젝트의 `ruleset`이 가리키는 룰셋 파일이 없으면 오류다.
 
 ## 3. 전역 설정 `qualgate.toml`
@@ -159,6 +164,13 @@ labels = []
 - `languages`는 규칙 디렉터리 이름의 목록이다. 지정하면 룰셋에서 켜진 것 중 이 목록에 있는 디렉터리만 실행한다.
 - `[scan]`, `[coverage]`, `[duplication]`, `[publish]`는 기존 `.qualgate.toml`과 같은 키와 기본값을 쓴다. 생략하면 기본값이다. 대상 저장소의 `.qualgate.toml`은 더 이상 쓰지 않는다.
 - `gate`가 비어 있으면 게이트는 항상 통과하고 경고를 남긴다.
+- `new_code_days`는 1~3650이어야 한다.
+- `[duplication]`의 `block_lines`와 `min_tokens`는 각각 1 이상이어야 한다(기본값 10, 100).
+- `[publish]`의 `labels`에 `qualgate:ignored`를 넣을 수 없다(대소문자 구분 없이 거부). 이 라벨은 qualgate가 "무시" 표시용으로 쓴다.
+- `[publish]`의 `max_new_issues`는 1~100으로 조정한다. 범위를 벗어나면 오류가 아니라 stderr에 `경고: publish.max_new_issues ...`를 출력하고 가장 가까운 값(1 또는 100)을 쓴다. 기본값은 20이다.
+- `[coverage]`의 키는 `jacoco`, `cobertura`, `lcov`, `go`(경로 패턴 목록)와 `required`다. 기본값은 `jacoco = ["**/build/reports/jacoco/**/*.xml", "**/target/site/jacoco/jacoco.xml"]`, `cobertura = ["coverage.xml"]`, `lcov = ["coverage/lcov.info"]`, `go = ["coverage.out"]`, `required = false`.
+- `[scan]`의 기본값은 `exclude = ["**/node_modules/**", "**/build/**", "**/dist/**", "**/vendor/**"]`, `test_paths = ["**/src/test/**", "**/*_test.go", "**/test_*.py", "**/*.spec.*", "**/*.test.*"]`다.
+- 위 표에 없는 키(예: 옛 `.qualgate.toml`의 `[rules]`, `[new_code]`, `[gate]` 표)는 모르는 키로 오류다.
 
 ## 7. 게이트 지표
 
@@ -174,7 +186,7 @@ labels = []
 | `coverage` | 전체 커버리지 | % |
 | `duplicated_lines` | 전체 중복 줄 비율 | % |
 
-- 비율 지표의 값은 0~100, 건수 지표의 값은 0 이상 정수다. 같은 지표를 한 게이트(전역 `default_gate` 또는 한 프로젝트의 `gate`) 안에서 두 번 쓰면 오류다.
+- 값은 유한한 수여야 하고 음수는 오류다. 비율 지표의 값은 0~100, 건수 지표(`new_issues`, `issues`)의 값은 0 이상 정수이면서 1,000,000 이하여야 한다. 같은 지표를 한 게이트(전역 `default_gate` 또는 한 프로젝트의 `gate`) 안에서 두 번 쓰면 오류다. 전역 게이트와 프로젝트 게이트는 따로 검사한다.
 - 측정하지 못한 지표의 조건은 건너뛴다. `coverage.required = true`이고 커버리지를 측정하지 못하면 커버리지 조건은 실패다.
 - 기존의 "변경 줄의 차단 등급 위반 0건" 조건은 `new_issues`로 대체되었고 `blocking_severities` 설정은 없다.
 
@@ -189,8 +201,11 @@ labels = []
 5. `languages`의 키(룰셋)와 항목(프로젝트)이 규칙 디렉터리 이름이다.
 6. `disabled_rules`와 `overrides`의 규칙 ID가 카탈로그에 있고, `disabled_rules`는 해당 디렉터리에 속한다.
 7. `severity`, `kind`, `metric`, `op` 값이 허용 목록 안에 있다.
-8. 게이트 값의 범위(비율 0~100, 건수 0 이상 정수)와 지표 중복.
-9. `rulesets/`, `projects/` 안의 항목이 규칙에 맞는 일반 파일·디렉터리다(심볼릭 링크 불가).
+8. 게이트 값: 유한하고 음수가 아님, 비율 0~100, 건수 0 이상 정수이고 1,000,000 이하, 한 게이트 안에서 지표 중복 금지.
+9. `rulesets/`, `projects/` 안의 항목이 규칙에 맞는 일반 파일·디렉터리다(심볼릭 링크, UTF-8이 아닌 이름 불가). 점으로 시작하는 항목과 `.md` 파일은 무시한다.
+10. 프로젝트의 `new_code_days`가 1~3650이다.
+11. `duplication.block_lines`, `duplication.min_tokens`가 1 이상이다.
+12. `publish.labels`에 `qualgate:ignored`가 없다. (`publish.max_new_issues`는 오류가 아니라 1~100으로 조정하고 경고를 낸다.)
 
 ## 9. 예시 파일
 
