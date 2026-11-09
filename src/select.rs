@@ -39,6 +39,14 @@ pub fn active_dirs(rs: &Ruleset, project_langs: Option<&[String]>, files: &[Stri
     v
 }
 
+/// `dirs` 중 하나 이상이 대상으로 하는 파일. 꺼진 디렉터리만 대상으로 하는 파일은 설정에 따른
+/// 제외이므로 분석 실패로 기록하지 않도록 뺀다(스펙 4.1).
+pub fn targeted_files(code: &[String], dirs: &[String]) -> Vec<String> {
+    code.iter()
+        .filter(|f| dirs_for_file(f).iter().any(|d| dirs.iter().any(|s| s == d)))
+        .cloned().collect()
+}
+
 pub struct Selection {
     /// 실행할 규칙이 하나 이상 있는 디렉터리.
     pub dirs: Vec<String>,
@@ -110,7 +118,17 @@ mod tests {
         assert!(dirs_for_file("src/java").is_empty());
     }
 
-    const RS: &str = "[languages.java]\n[languages.ts]\n[languages.react]\n[languages.go]\nenabled = false\n";
+    #[test]
+    fn targeted_files_keeps_files_of_any_active_dir() {
+        let code = s(&["a.tsx", "b.vue", "c.ts", "d.java", "e.go"]);
+        assert_eq!(targeted_files(&code, &s(&["react"])), s(&["a.tsx"]));
+        assert_eq!(targeted_files(&code, &s(&["vue"])), s(&["b.vue"]));
+        assert_eq!(targeted_files(&code, &s(&["ts"])), s(&["a.tsx", "b.vue", "c.ts"]));
+        assert_eq!(targeted_files(&code, &s(&["java", "go"])), s(&["d.java", "e.go"]));
+        assert!(targeted_files(&code, &[]).is_empty());
+    }
+
+    const RS: &str ="[languages.java]\n[languages.ts]\n[languages.react]\n[languages.go]\nenabled = false\n";
 
     #[test]
     fn active_dirs_intersects_ruleset_with_detected_or_declared() {

@@ -68,9 +68,7 @@ pub fn scan(src: &Path, config_dir: &Path, repo: &str, rules_root: &Path, opengr
     } else {
         // 꺼진 디렉터리만 대상으로 하는 파일은 설정에 따른 제외다(스펙 4.1). 분석 실패로 기록하지
         // 않도록 실행하는 디렉터리의 대상 파일만 넘긴다.
-        let targeted: Vec<String> = code.iter()
-            .filter(|f| select::dirs_for_file(f).iter().any(|d| sel.dirs.iter().any(|s| s == d)))
-            .cloned().collect();
+        let targeted = select::targeted_files(&code, &sel.dirs);
         rules::run(&rules::RunOpts {
             opengrep: opengrep.to_string(),
             src: src.to_path_buf(),

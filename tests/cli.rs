@@ -404,3 +404,52 @@ fn wrong_rules_path_exits_2_for_catalog_and_validate() {
     let st = bin().args(["validate-config", "--config-dir"]).arg(fixture_cfg("good")).env("QUALGATE_RULES", t.path()).status().unwrap();
     assert_eq!(st.code(), Some(2));
 }
+
+/// 활성 디렉터리의 파일을 Opengrep이 분석하지 못하면(문법 오류) `unanalyzed`에 기록한다.
+/// 룰셋에서 꺼진 디렉터리의 파일(A.java)은 기록하지 않는다.
+#[test]
+fn file_of_an_active_dir_that_opengrep_cannot_parse_is_unanalyzed() {
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let src = repo();
+    std::fs::write(src.path().join("broken.py"), "def f(:\n    ))) = = =\n").unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let o = scan_cmd(src.path(), &fixture_cfg("scan"), out.path()).output().unwrap();
+    assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(read_result(out.path())["unanalyzed"], serde_json::json!(["broken.py"]));
+}
+
+#[test]
+fn scan_without_active_rules_warns_and_reports_empty_findings() {
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let src = repo();
+    let cfg = config_copy();
+    std::fs::write(cfg.path().join("rulesets/std.toml"), "schema = 1\nname = \"std\"\n[languages.python]\nenabled = false\n").unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let o = scan_cmd(src.path(), cfg.path(), out.path()).output().unwrap();
+    assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("실행할 규칙이 없어"), "{}", String::from_utf8_lossy(&o.stderr));
+    let v = read_result(out.path());
+    assert_eq!(v["findings"], serde_json::json!([]));
+    assert_eq!(v["active_rules"], serde_json::json!([]));
+    assert_eq!(v["active_dirs"], serde_json::json!([]));
+    assert_eq!(v["unanalyzed"], serde_json::json!([]));
+    // 신규 코드를 측정했으므로 이슈는 0건으로 측정된다.
+    assert_eq!((v["metrics"]["new_issues"].clone(), v["metrics"]["issues"].clone()), (0.into(), 0.into()));
+}
+
+#[test]
+fn malformed_newcode_json_exits_2() {
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let full = repo();
+    let t = tempfile::tempdir().unwrap();
+    let shallow = t.path().join("s");
+    let url = format!("file://{}", full.path().display());
+    assert!(Command::new("git").args(["clone", "-q", "--depth", "1", &url]).arg(&shallow).status().unwrap().success());
+    let cfg = config_copy();
+    std::fs::write(cfg.path().join("newcode.json"), "{ not json").unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let o = scan_cmd(&shallow, cfg.path(), out.path()).output().unwrap();
+    assert_eq!(o.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("newcode.json"), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(!out.path().join("result.json").exists());
+}
