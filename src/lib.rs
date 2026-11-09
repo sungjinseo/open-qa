@@ -6,6 +6,7 @@ pub mod fsutil;
 pub mod gate;
 pub mod gatecalc;
 pub mod gitea;
+pub mod httpcfg;
 pub mod initcfg;
 pub mod model;
 pub mod newcode;

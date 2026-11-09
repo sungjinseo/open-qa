@@ -46,8 +46,8 @@ fn do_scan(src: &Path, config: &Path, out: &Path) -> Result<()> {
 /// 게이트 판정은 아직 하지 않는다(Task 6/9). 동기화만 한다.
 fn do_publish(r: &ScanResult, repo: &str) -> Result<()> {
     let base = std::env::var("GITEA_URL").context("GITEA_URL 환경 변수가 필요합니다")?;
-    let token = std::env::var("GITEA_TOKEN").context("GITEA_TOKEN 환경 변수가 필요합니다")?;
-    let mut api = Client::new(&base, repo, &token);
+    let auth = qualgate::httpcfg::resolve_auth(&base)?;
+    let mut api = Client::new(&base, repo, auth, qualgate::httpcfg::agent()?);
     let default = api.default_branch()?;
     if r.branch.as_deref() != Some(default.as_str()) {
         println!("브랜치 {:?}는 기본 브랜치 {default}가 아니어서 이슈를 동기화하지 않습니다.", r.branch);
