@@ -1,6 +1,6 @@
 use crate::gitea::{Issue, IssueApi};
 use crate::model::ScanResult;
-use crate::render::{self, parse_issue_state, IssueState, SUMMARY_KEY};
+use crate::render::{self, parse_issue_state, IssueState, RENDER_VERSION, SUMMARY_KEY};
 use crate::track::track;
 use anyhow::Result;
 use std::collections::BTreeMap;
@@ -20,8 +20,8 @@ fn apply_part(api: &mut dyn IssueApi, e: &Existing, title: &str, body: &str, rep
         api.edit_issue(e.issue.number, title, body, true)?;
         api.comment(e.issue.number, "같은 문제가 다시 발견되어 이슈를 다시 열었습니다.")?;
         rep.reopened += 1;
-    } else if e.issue.title != title || e.state.items != items {
-        // 링크에 커밋이 들어가 본문은 커밋마다 달라지므로 본문이 아니라 항목을 비교한다.
+    } else if e.issue.title != title || e.state.items != items || e.state.v != RENDER_VERSION {
+        // 링크에 커밋이 들어가 본문은 커밋마다 달라지므로 본문이 아니라 항목과 렌더 버전을 비교한다.
         api.edit_issue(e.issue.number, title, body, true)?;
         if !t.new_items.is_empty() || !t.gone.is_empty() {
             api.comment(e.issue.number, &format!("변경 사항: 신규 {}건, 해결 {}건", t.new_items.len(), t.gone.len()))?;
@@ -34,9 +34,11 @@ fn apply_part(api: &mut dyn IssueApi, e: &Existing, title: &str, body: &str, rep
 fn is_ignored(e: &Existing) -> bool { e.issue.labels.iter().any(|l| l == IGNORED_LABEL) }
 
 fn close(api: &mut dyn IssueApi, e: &Existing, why: &str, rep: &mut SyncReport) -> Result<()> {
-    api.comment(e.issue.number, why)?;
+    // 먼저 닫는다. 닫기가 실패했는데 댓글만 남으면 다음 실행에서 댓글이 반복된다.
+    // 닫은 뒤 댓글이 실패하면 오류를 돌려주지만 이슈는 이미 닫혀 다음 실행이 반복하지 않는다.
     api.edit_issue(e.issue.number, &e.issue.title, &e.issue.body, false)?;
     rep.closed += 1;
+    api.comment(e.issue.number, why)?;
     Ok(())
 }
 
@@ -104,6 +106,10 @@ pub fn sync(api: &mut dyn IssueApi, r: &ScanResult, base_url: &str, repo: &str) 
             Some(e) => { api.edit_issue(e.issue.number, &title, &body, true)?; rep.updated += 1; }
             None => { api.create_issue(&title, &body, labels)?; rep.created += 1; }
         }
+        // 요약 이슈는 하나만 관리한다. 더 있으면 닫는다.
+        for e in summary_existing.iter().flatten().skip(1).filter(|e| e.issue.open) {
+            close(api, e, "요약 이슈가 중복되어 이 이슈를 닫습니다.", &mut rep)?;
+        }
     }
     Ok(rep)
 }
@@ -115,7 +121,7 @@ mod tests {
     use crate::render::parse_state;
 
     #[derive(Default)]
-    struct Fake { issues: Vec<Issue>, comments: Vec<(u64, String)>, calls: usize, labels: Vec<String>, listed: Vec<String>, next: u64 }
+    struct Fake { issues: Vec<Issue>, comments: Vec<(u64, String)>, calls: usize, labels: Vec<String>, listed: Vec<String>, next: u64, fail_edit: bool, fail_comment: bool }
 
     impl IssueApi for Fake {
         fn default_branch(&mut self) -> Result<String> { Ok("main".into()) }
@@ -128,12 +134,13 @@ mod tests {
             Ok(self.next)
         }
         fn edit_issue(&mut self, n: u64, t: &str, b: &str, open: bool) -> Result<()> {
+            if self.fail_edit { anyhow::bail!("edit 실패"); }
             self.calls += 1;
             let i = self.issues.iter_mut().find(|i| i.number == n).unwrap();
             i.title = t.into(); i.body = b.into(); i.open = open;
             Ok(())
         }
-        fn comment(&mut self, n: u64, b: &str) -> Result<()> { self.calls += 1; self.comments.push((n, b.into())); Ok(()) }
+        fn comment(&mut self, n: u64, b: &str) -> Result<()> { if self.fail_comment { anyhow::bail!("comment 실패"); } self.calls += 1; self.comments.push((n, b.into())); Ok(()) }
     }
 
     fn f(rule: &str, file: &str, line: u32, sev: Severity) -> Finding {
@@ -381,5 +388,95 @@ mod tests {
         a.issues.push(Issue { number: 900, title: "사람 이슈".into(), body: format!("> 인용\n{state_body}\n이어지는 글"), open: true, labels: vec![BASE_LABEL.into()] });
         run(&mut a, &result(vec![]));
         assert!(a.issues.iter().find(|i| i.number == 900).unwrap().open);
+    }
+
+    #[test]
+    fn human_issue_quoting_state_at_the_end_stays_untouched() {
+        let mut a = Fake::default();
+        run(&mut a, &result(vec![f("r", "a.java", 1, Severity::High)]));
+        let state_line = by_key(&a, K).body.lines().rev().find(|l| l.starts_with("<!--")).unwrap().to_string();
+        a.next = 900;
+        a.issues.push(Issue { number: 900, title: "사람 이슈".into(), body: format!("> {state_line}"), open: true, labels: vec![BASE_LABEL.into()] });
+        a.calls = 0;
+        let rep = run(&mut a, &result(vec![f("r", "a.java", 1, Severity::High)]));
+        assert_eq!(rep, SyncReport::default());
+        assert_eq!(a.calls, 0);
+        run(&mut a, &result(vec![]));
+        let h = a.issues.iter().find(|i| i.number == 900).unwrap();
+        assert!(h.open);
+        assert_eq!(h.title, "사람 이슈");
+    }
+
+    #[test]
+    fn old_render_version_is_rewritten_once() {
+        let mut a = Fake::default();
+        let r = result(vec![f("r", "a.java", 1, Severity::High)]);
+        run(&mut a, &r);
+        let n = by_key(&a, K).number;
+        let i = a.issues.iter_mut().find(|i| i.number == n).unwrap();
+        i.body = i.body.replace(&format!(",\"v\":{RENDER_VERSION}"), "");
+        assert_eq!(parse_state(&i.body).unwrap().v, 0);
+        a.calls = 0;
+        let rep = run(&mut a, &r);
+        assert_eq!(rep.updated, 1);
+        assert_eq!(a.calls, 1);
+        assert_eq!(parse_state(&by_key(&a, K).body).unwrap().v, RENDER_VERSION);
+        a.calls = 0;
+        assert_eq!(run(&mut a, &r), SyncReport::default());
+        assert_eq!(a.calls, 0);
+    }
+
+    #[test]
+    fn failed_close_edit_posts_no_comment() {
+        let mut a = Fake::default();
+        run(&mut a, &result(vec![f("r", "a.java", 1, Severity::High)]));
+        a.comments.clear();
+        a.fail_edit = true;
+        assert!(sync(&mut a, &result(vec![]), "http://g", "o/r").is_err());
+        assert!(a.comments.is_empty());
+        assert!(by_key(&a, K).open);
+    }
+
+    #[test]
+    fn failed_close_comment_is_an_error_but_the_issue_is_closed() {
+        let mut a = Fake::default();
+        run(&mut a, &result(vec![f("r", "a.java", 1, Severity::High)]));
+        a.fail_comment = true;
+        assert!(sync(&mut a, &result(vec![]), "http://g", "o/r").is_err());
+        assert!(!by_key(&a, K).open);
+        a.fail_comment = false;
+        a.comments.clear();
+        let rep = run(&mut a, &result(vec![]));
+        assert_eq!(rep.closed, 0);
+        assert!(a.comments.is_empty());
+    }
+
+    #[test]
+    fn failed_reopen_edit_posts_no_comment() {
+        let mut a = Fake::default();
+        let r = result(vec![f("r", "a.java", 1, Severity::High)]);
+        run(&mut a, &r);
+        run(&mut a, &result(vec![]));
+        a.comments.clear();
+        a.fail_edit = true;
+        assert!(sync(&mut a, &r, "http://g", "o/r").is_err());
+        assert!(a.comments.is_empty());
+    }
+
+    #[test]
+    fn duplicate_summary_issues_are_closed_with_comment() {
+        let mut a = Fake::default();
+        run(&mut a, &result(vec![]));
+        let first = by_key(&a, SUMMARY_KEY);
+        a.next = 900;
+        a.issues.push(Issue { number: 900, ..first.clone() });
+        let rep = run(&mut a, &result(vec![]));
+        assert_eq!(rep.closed, 1);
+        assert!(a.issues.iter().find(|i| i.number == first.number).unwrap().open);
+        assert!(!a.issues.iter().find(|i| i.number == 900).unwrap().open);
+        assert!(a.comments.iter().any(|(n, _)| *n == 900));
+        a.calls = 0;
+        assert_eq!(run(&mut a, &result(vec![])), SyncReport::default());
+        assert_eq!(a.calls, 0);
     }
 }

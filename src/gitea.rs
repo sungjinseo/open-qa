@@ -35,6 +35,14 @@ pub(crate) fn should_retry(method: &str, o: Outcome) -> bool {
     }
 }
 
+/// 재시도 전 대기 시간. 429의 `Retry-After`(초)가 있으면 60초까지 따르고, 없으면 지수 백오프(2, 4, 8초).
+pub(crate) fn retry_delay(attempt: u32, retry_after: Option<u64>) -> Duration {
+    match retry_after {
+        Some(s) => Duration::from_secs(s.min(60)),
+        None => Duration::from_secs(1 << attempt),
+    }
+}
+
 /// 요청한 이름이 모두 존재해야 한다. 하나라도 없으면 라벨 없는 이슈가 생기므로 오류다.
 fn resolve_labels(all: &[LabelDto], names: &[String]) -> Result<Vec<u64>> {
     names.iter().map(|n| {
@@ -70,8 +78,9 @@ impl Client {
     // 오류 메시지에 토큰을 넣지 않는다(url과 서버 응답 본문만 사용).
     fn call(&self, method: &str, url: &str, body: Option<&Value>) -> Result<Value> {
         let mut last = String::new();
+        let mut retry_after: Option<u64> = None;
         for attempt in 0..4 {
-            if attempt > 0 { std::thread::sleep(Duration::from_secs(1 << attempt)); }
+            if attempt > 0 { std::thread::sleep(retry_delay(attempt, retry_after.take())); }
             let auth = format!("token {}", self.token);
             let resp = match (method, body) {
                 ("GET", _) => self.agent.get(url).header("Authorization", &auth).call(),
@@ -88,6 +97,9 @@ impl Client {
                 }
             };
             let code = resp.status().as_u16();
+            if code == 429 {
+                retry_after = resp.headers().get("retry-after").and_then(|v| v.to_str().ok()).and_then(|v| v.trim().parse().ok());
+            }
             let text = resp.body_mut().read_to_string().unwrap_or_default();
             match code {
                 200..=299 => return if text.trim().is_empty() { Ok(Value::Null) } else { serde_json::from_str(&text).context("Gitea 응답 파싱") },
@@ -158,7 +170,8 @@ impl IssueApi for Client {
 
 #[cfg(test)]
 mod tests {
-    use super::{encode_query, resolve_labels, should_retry, LabelDto, Outcome};
+    use super::{encode_query, resolve_labels, retry_delay, should_retry, LabelDto, Outcome};
+    use std::time::Duration;
 
     #[test]
     fn retry_policy_by_method() {
@@ -170,6 +183,15 @@ mod tests {
         assert!(should_retry("PATCH", Outcome::Status(500)));
         assert!(!should_retry("POST", Outcome::Status(502)));
         assert!(!should_retry("GET", Outcome::Status(404)));
+    }
+
+    #[test]
+    fn retry_delay_honours_retry_after_capped_at_sixty() {
+        assert_eq!(retry_delay(1, Some(5)), Duration::from_secs(5));
+        assert_eq!(retry_delay(1, Some(0)), Duration::from_secs(0));
+        assert_eq!(retry_delay(1, Some(3600)), Duration::from_secs(60));
+        assert_eq!(retry_delay(1, None), Duration::from_secs(2));
+        assert_eq!(retry_delay(3, None), Duration::from_secs(8));
     }
 
     #[test]

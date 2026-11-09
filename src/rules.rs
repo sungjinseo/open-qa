@@ -130,11 +130,21 @@ fn line_at(text: &str, line: u32) -> Option<String> {
 fn is_vue(path: &str) -> bool { Lang::of(path) == Some(Lang::Vue) }
 
 /// 기본 규칙은 `.jsx`, `.tsx`, Vue script만 대상으로 하고 Opengrep은 `.mts`, `.cts`를 아예 스캔하지
-/// 않는다. 이 확장자들은 스캔되지 않는 것이 정상이므로(중복도와 커버리지만 측정) 항상 분석 실패가
-/// 되지 않도록 스캔 여부를 요구하지 않는다.
-fn must_be_scanned(path: &str) -> bool {
+/// 않는다. 그래서 JS/TS 계열은 Opengrep이 그 확장자의 파일을 하나라도 스캔했을 때(`seen_exts`)만
+/// 스캔 여부를 요구한다. 확장자가 한 번도 보이지 않으면 대상 규칙이 없는 것이므로 분석 실패가
+/// 아니다(중복도와 커버리지만 측정). 그 밖의 확장자는 항상 요구한다.
+fn must_be_scanned(path: &str, seen_exts: &BTreeSet<String>) -> bool {
     let ext = path.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
-    !matches!(ext.as_str(), "js" | "ts" | "mjs" | "cjs" | "mts" | "cts")
+    if matches!(ext.as_str(), "js" | "ts" | "mjs" | "cjs" | "mts" | "cts") { seen_exts.contains(&ext) } else { true }
+}
+
+/// 본 호출이 스캔한 경로의 소문자 확장자 집합. Vue script용 `.vue.js`/`.vue.ts`는 제외한다.
+fn scanned_exts(scanned: &[String]) -> BTreeSet<String> {
+    scanned.iter().filter_map(|p| {
+        let l = p.to_ascii_lowercase();
+        if l.ends_with(".vue.js") || l.ends_with(".vue.ts") { return None; }
+        l.rsplit_once('.').map(|(_, e)| e.to_string())
+    }).collect()
 }
 
 pub fn run(opts: &RunOpts) -> Result<RulesOutcome> {
@@ -145,6 +155,7 @@ pub fn run(opts: &RunOpts) -> Result<RulesOutcome> {
     let mut all = parse_output(&json, &opts.disabled, &read_src)?;
     all.findings.retain(|f| !excl.is_match(&f.file));
     all.unanalyzed.retain(|f| !excl.is_match(f));
+    let seen_exts = scanned_exts(&all.scanned);
     // `.vue` 원본이 스캔된 것은 script를 분석했다는 뜻이 아니다. 아래에서 따로 판단한다.
     let mut scanned: BTreeSet<String> = all.scanned.drain(..).filter(|f| !is_vue(f)).collect();
 
@@ -158,7 +169,9 @@ pub fn run(opts: &RunOpts) -> Result<RulesOutcome> {
         };
         match crate::vue::extract(&text) {
             Sfc::Script(e) => {
-                let dst = tmp.path().join(format!("{rel}.{}", e.ext));
+                // 규칙은 tsx도 `.vue.ts`로 스캔한다(JSX 전용 규칙은 없다).
+                let ext = if e.ext == "tsx" { "ts" } else { e.ext };
+                let dst = tmp.path().join(format!("{rel}.{ext}"));
                 std::fs::create_dir_all(dst.parent().unwrap())?;
                 std::fs::write(dst, e.text)?;
                 any_vue = true;
@@ -179,14 +192,14 @@ pub fn run(opts: &RunOpts) -> Result<RulesOutcome> {
     }
 
     let failed: BTreeSet<String> = all.unanalyzed.iter().cloned().collect();
-    let required: Vec<&String> = opts.code.iter().filter(|f| must_be_scanned(f) && !failed.contains(*f)).collect();
+    let required: Vec<&String> = opts.code.iter().filter(|f| must_be_scanned(f, &seen_exts) && !failed.contains(*f)).collect();
     ensure!(required.is_empty() || required.iter().any(|f| scanned.contains(*f)),
         "Opengrep이 분석 대상 파일 {}개 중 하나도 스캔하지 않았습니다", required.len());
     for f in required {
         if !scanned.contains(f) { all.unanalyzed.push(f.clone()); }
     }
     // 스캔을 요구하지 않는 파일도 외부 규칙의 대상일 수 있으므로 읽을 수 있는지는 확인한다.
-    for f in opts.code.iter().filter(|f| !must_be_scanned(f)) {
+    for f in opts.code.iter().filter(|f| !must_be_scanned(f, &seen_exts)) {
         if std::fs::File::open(opts.src.join(f)).is_err() { all.unanalyzed.push(f.clone()); }
     }
     all.scanned = scanned.into_iter().collect();
@@ -299,7 +312,7 @@ mod tests {
             rule_paths: vec![rule],
             exclude: exclude.iter().map(|s| s.to_string()).collect(),
             disabled: vec![],
-            code: crate::fsutil::walk(src).unwrap().into_iter()
+            code: crate::fsutil::walk(src, &crate::fsutil::globset(&[]).unwrap()).unwrap().into_iter()
                 .filter(|p| Lang::of(p).is_some() && !excl.is_match(p.as_str())).collect(),
         }
     }
@@ -425,6 +438,35 @@ mod tests {
         put(d.path(), "a.ts", "const a = 1\n");
         let r = run(&opts(d.path(), rule, &[])).unwrap();
         assert_eq!(r.unanalyzed, Vec::<String>::new());
+    }
+
+    /// Opengrep이 건너뛴 .js가 있으면(외부 규칙이 .js를 대상으로 하는 경우) 그 파일은 분석 실패다.
+    #[test]
+    fn plain_js_skipped_by_the_engine_is_unanalyzed_when_js_is_scanned() {
+        let _g = serial();
+        let d = tempfile::tempdir().unwrap();
+        let rd = tempfile::tempdir().unwrap();
+        let rule = write_rule(rd.path());
+        put(d.path(), "a.js", "eval('1')
+");
+        put(d.path(), "skip/a.js", "eval('2')
+");
+        let mut o = opts(d.path(), rule, &["**/skip/**"]);
+        o.code = vec!["a.js".into(), "skip/a.js".into()];
+        let r = run(&o).unwrap();
+        assert_eq!(r.unanalyzed, vec!["skip/a.js".to_string()]);
+        assert_eq!(files(&r), vec!["a.js".to_string()]);
+    }
+
+    #[test]
+    fn scanned_exts_ignore_vue_script_copies() {
+        let got = scanned_exts(&["a.JS".into(), "b/C.vue.ts".into(), "D.vue.js".into(), "e.py".into(), "noext".into()]);
+        assert_eq!(got.into_iter().collect::<Vec<_>>(), vec!["js".to_string(), "py".to_string()]);
+        let seen = scanned_exts(&["x.vue.js".into()]);
+        assert!(!must_be_scanned("a.js", &seen));
+        assert!(must_be_scanned("a.py", &seen));
+        assert!(must_be_scanned("a.js", &scanned_exts(&["b.js".into()])));
+        assert!(!must_be_scanned("a.ts", &scanned_exts(&["b.js".into()])));
     }
 
     #[test]

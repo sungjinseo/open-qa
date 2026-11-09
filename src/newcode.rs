@@ -11,28 +11,54 @@ fn git(src: &Path, args: &[&str]) -> Result<String> {
     Ok(String::from_utf8_lossy(&o.stdout).into_owned())
 }
 
-pub fn parse_diff(diff: &str) -> ChangedLines {
+/// `@@ -a[,b] +c[,d] @@`에서 (옛 줄 수, 새 시작, 새 줄 수)
+fn parse_hunk(line: &str) -> Option<(u32, u32, u32)> {
+    let mut it = line.split_whitespace().skip(1);
+    let span = |t: &str, sign: char| -> Option<(u32, u32)> {
+        let spec = t.strip_prefix(sign)?;
+        Some(match spec.split_once(',') {
+            Some((a, b)) => (a.parse().ok()?, b.parse().ok()?),
+            None => (spec.parse().ok()?, 1),
+        })
+    };
+    let (_, old) = span(it.next()?, '-')?;
+    let (start, count) = span(it.next()?, '+')?;
+    Some((old, start, count))
+}
+
+/// 변경된 줄과, 따옴표로 감싼 파일 경로(줄 번호를 파일에 연결할 수 없음)를 만났는지.
+/// 헤더(`+++ `)는 hunk 밖에서만 인정한다. 줄 수로 hunk 본문을 건너뛰므로 내용이 `++ b/x`인 추가 줄
+/// (`+++ b/x`로 보임)이 파일 헤더로 오인되지 않는다.
+fn parse_diff_ex(diff: &str) -> (ChangedLines, bool) {
     let mut out = ChangedLines::new();
+    let mut quoted = false;
     let mut file: Option<String> = None;
+    let (mut old_left, mut new_left) = (0u32, 0u32);
     for line in diff.lines() {
-        if let Some(p) = line.strip_prefix("+++ ") {
+        if old_left > 0 || new_left > 0 {
+            match line.as_bytes().first() {
+                Some(b'+') => new_left = new_left.saturating_sub(1),
+                Some(b'-') => old_left = old_left.saturating_sub(1),
+                Some(b'\\') => {}
+                _ => { old_left = old_left.saturating_sub(1); new_left = new_left.saturating_sub(1); }
+            }
+        } else if let Some(p) = line.strip_prefix("+++ ") {
             // git appends a tab after paths that contain a space.
             let p = p.strip_suffix('\t').unwrap_or(p);
+            quoted |= p.starts_with('"');
             file = p.strip_prefix("b/").map(str::to_string);
         } else if line.starts_with("@@") {
+            let Some((old, start, count)) = parse_hunk(line) else { continue };
+            (old_left, new_left) = (old, count);
             let Some(f) = &file else { continue };
-            let Some(plus) = line.split_whitespace().find(|t| t.starts_with('+')) else { continue };
-            let spec = plus.trim_start_matches('+');
-            let (start, count) = match spec.split_once(',') {
-                Some((a, b)) => (a.parse::<u32>().unwrap_or(0), b.parse::<u32>().unwrap_or(0)),
-                None => (spec.parse::<u32>().unwrap_or(0), 1),
-            };
             let e = out.entry(f.clone()).or_default();
             for n in start..start.saturating_add(count) { e.insert(n); }
         }
     }
-    out
+    (out, quoted)
 }
+
+pub fn parse_diff(diff: &str) -> ChangedLines { parse_diff_ex(diff).0 }
 
 pub fn changed(src: &Path, days: u32) -> Result<Option<ChangedLines>> {
     if git(src, &["rev-parse", "--is-shallow-repository"])?.trim() == "true" { return Ok(None); }
@@ -43,8 +69,9 @@ pub fn changed(src: &Path, days: u32) -> Result<Option<ChangedLines>> {
     let diff = git(src, &["-c", "core.quotepath=false", "diff", "-U0", "--no-color", "--no-ext-diff", "--find-renames", "--src-prefix=a/", "--dst-prefix=b/", base, "HEAD"])?;
     // git still quotes paths with control characters, quotes or backslashes. Those hunks
     // cannot be mapped to a file name, so report unmeasured rather than undercount.
-    if diff.lines().any(|l| l.starts_with("+++ \"")) { return Ok(None); }
-    Ok(Some(parse_diff(&diff)))
+    let (c, quoted) = parse_diff_ex(&diff);
+    if quoted { return Ok(None); }
+    Ok(Some(c))
 }
 
 pub fn head_info(src: &Path) -> Result<(String, Option<String>)> {
@@ -66,6 +93,29 @@ mod tests {
         let c = parse_diff(d);
         assert_eq!(c["a.go"].iter().copied().collect::<Vec<_>>(), vec![2, 3, 7]);
         assert!(!c.contains_key("gone"));
+    }
+
+    #[test]
+    fn added_line_that_looks_like_a_file_header_is_content() {
+        // 추가된 줄 `++ b/x`는 diff에서 `+++ b/x`로 보인다. 파일 헤더가 아니다.
+        let d = "diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -1,0 +2,2 @@\n+++ b/x\n+y\n@@ -9 +11 @@\n-q\n+w\n";
+        let (c, quoted) = parse_diff_ex(d);
+        assert!(!quoted);
+        assert_eq!(c.keys().collect::<Vec<_>>(), vec!["a.go"]);
+        assert_eq!(c["a.go"].iter().copied().collect::<Vec<_>>(), vec![2, 3, 11]);
+        // 따옴표 경로처럼 보이는 추가 줄도 헤더가 아니다.
+        let d = "--- a/a.go\n+++ b/a.go\n@@ -0,0 +1 @@\n+++ \"b/q\n";
+        assert!(!parse_diff_ex(d).1);
+        // 진짜 따옴표 헤더는 감지한다.
+        assert!(parse_diff_ex("--- a/a\n+++ \"b/q\\\"x\"\n@@ -0,0 +1 @@\n+z\n").1);
+    }
+
+    #[test]
+    fn hunk_bodies_with_context_lines_are_skipped_by_count() {
+        let d = "--- a/a.go\n+++ b/a.go\n@@ -1,2 +1,3 @@\n ctx\n-old\n+new\n+++ b/evil\n@@ -9 +10 @@\n-q\n+w\n\\ No newline at end of file\n";
+        let c = parse_diff(d);
+        assert_eq!(c.keys().collect::<Vec<_>>(), vec!["a.go"]);
+        assert_eq!(c["a.go"].iter().copied().collect::<Vec<_>>(), vec![1, 2, 3, 10]);
     }
 
     fn commit(dir: &Path, file: &str, body: &str, date: &str) {

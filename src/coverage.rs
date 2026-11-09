@@ -15,11 +15,14 @@ pub struct Loaded {
     pub reports: Vec<String>,
     pub unresolved: Vec<String>,
     pub errors: Vec<String>,
+    /// `errors`와 같은 순서가 아니어도 되는 사람용 메시지(`경로: 이유`). 경고 출력에 쓴다.
+    pub error_details: Vec<String>,
 }
 
 fn attr(e: &BytesStart, name: &[u8]) -> Option<String> {
+    // `&amp;` 같은 엔티티를 풀어야 `A&B.java` 같은 파일 이름이 실제 경로와 맞는다.
     e.attributes().flatten().find(|a| a.key.as_ref().as_bytes() == name)
-        .map(|a| a.value.into_owned())
+        .map(|a| a.normalized_value(quick_xml::XmlVersion::Implicit1_0).map_or_else(|_| a.value.to_string(), |v| v.into_owned()))
 }
 
 fn merge_line(m: &mut BTreeMap<u32, LineCov>, line: u32, c: LineCov) {
@@ -45,8 +48,10 @@ pub fn parse_jacoco(xml: &str) -> Result<RawCov> {
                 }
                 b"line" => if let Some(f) = &file {
                     let g = |k: &[u8]| attr(&e, k).and_then(|v| v.parse::<u32>().ok()).unwrap_or(0);
+                    // 줄 번호가 없거나 읽지 못하면 0번 줄로 기록하지 않고 건너뛴다.
+                    let Some(nr) = attr(&e, b"nr").and_then(|v| v.parse::<u32>().ok()) else { continue };
                     let (mb, cb) = (g(b"mb"), g(b"cb"));
-                    merge_line(out.entry(f.clone()).or_default(), g(b"nr"),
+                    merge_line(out.entry(f.clone()).or_default(), nr,
                         LineCov { covered: g(b"ci") > 0, conditions: mb + cb, covered_conditions: cb });
                 },
                 _ => {}
@@ -71,7 +76,7 @@ pub fn parse_cobertura(xml: &str) -> Result<RawCov> {
                 b"coverage" => saw_root = true,
                 b"class" => file = attr(&e, b"filename"),
                 b"line" => if let Some(f) = &file {
-                    let line = attr(&e, b"number").and_then(|v| v.parse().ok()).unwrap_or(0);
+                    let Some(line) = attr(&e, b"number").and_then(|v| v.parse::<u32>().ok()) else { continue };
                     let hits: u64 = attr(&e, b"hits").and_then(|v| v.parse().ok()).unwrap_or(0);
                     let (cc, total) = attr(&e, b"condition-coverage").as_deref().and_then(parse_condition).unwrap_or((0, 0));
                     merge_line(out.entry(f.clone()).or_default(), line,
@@ -159,15 +164,36 @@ fn match_len(report_path: &str, file: &str) -> usize {
     if n == rp.len().min(fp.len()) { n } else { 0 }
 }
 
-fn best_len(report_path: &str, files: &[String]) -> usize {
-    files.iter().map(|f| match_len(report_path, f)).max().unwrap_or(0)
+fn is_kotlin(path: &str) -> bool { path.ends_with(".kt") || path.ends_with(".kts") }
+
+/// 앞쪽 디렉터리가 달라도 뒤쪽 구성 요소가 이어서 같은 개수. JaCoCo는 패키지 경로
+/// (`org/acme/net/A.kt`)를 쓰지만 Kotlin은 루트 패키지 디렉터리를 생략(`src/main/kotlin/net/A.kt`)하는
+/// 것이 관례다. 파일 이름만 같은 경우를 막으려고 디렉터리 하나 이상이 같아야(2개 이상) 하고,
+/// 오탐을 줄이려고 Kotlin 리포트 경로에만 적용한다.
+fn trailing_len(report_path: &str, file: &str) -> usize {
+    if !is_kotlin(report_path) || !is_kotlin(file) { return 0; }
+    let rp = report_path.split('/').filter(|s| !s.is_empty());
+    let n = file.split('/').rev().zip(rp.rev()).take_while(|(a, b)| a == b).count();
+    if n >= 2 { n } else { 0 }
+}
+
+/// 전체 접미사 일치가 먼저(2), 없을 때만 후행 구성 요소 일치(1). 클수록 더 확실한 일치다.
+fn rank(report_path: &str, file: &str) -> (u8, usize) {
+    match match_len(report_path, file) {
+        0 => match trailing_len(report_path, file) { 0 => (0, 0), n => (1, n) },
+        n => (2, n),
+    }
+}
+
+fn best_rank(report_path: &str, files: &[String]) -> (u8, usize) {
+    files.iter().map(|f| rank(report_path, f)).max().unwrap_or((0, 0))
 }
 
 /// 리포트 경로와 저장소 경로를 뒤에서부터 비교해 가장 길게 일치하는 파일을 고른다.
 pub fn resolve(report_path: &str, files: &[String]) -> Option<String> {
-    let best = best_len(report_path, files);
-    if best == 0 { return None; }
-    let found: Vec<&String> = files.iter().filter(|f| match_len(report_path, f) == best).collect();
+    let best = best_rank(report_path, files);
+    if best.0 == 0 { return None; }
+    let found: Vec<&String> = files.iter().filter(|f| rank(report_path, f) == best).collect();
     if found.len() == 1 { Some(found[0].clone()) } else { None }
 }
 
@@ -180,15 +206,22 @@ pub fn load(src: &Path, all: &[String], code: &[String], excluded: &[String], te
         (&cfg.lcov, parse_lcov), (&cfg.go, parse_go),
     ];
     for (patterns, parser) in kinds {
-        let Ok(gs) = crate::fsutil::globset(patterns) else { out.errors.extend(patterns.iter().cloned()); continue };
+        let gs = match crate::fsutil::globset(patterns) {
+            Ok(g) => g,
+            Err(e) => {
+                out.errors.extend(patterns.iter().cloned());
+                out.error_details.extend(patterns.iter().map(|p| format!("{p}: {e:#}")));
+                continue;
+            }
+        };
         for rel in all.iter().filter(|p| gs.is_match(p.as_str())) {
             let parsed = std::fs::read_to_string(src.join(rel)).map_err(anyhow::Error::from).and_then(|t| parser(&t));
             match parsed {
-                Err(_) => out.errors.push(rel.clone()),
+                Err(e) => { out.errors.push(rel.clone()); out.error_details.push(format!("{rel}: {e:#}")); }
                 Ok(raw) => {
                     out.reports.push(rel.clone());
                     for (path, lines) in raw {
-                        if best_len(&path, excluded) > best_len(&path, code) { continue; }
+                        if best_rank(&path, excluded) > best_rank(&path, code) { continue; }
                         match resolve(&path, code) {
                             None => out.unresolved.push(path),
                             Some(f) if tests.is_match(f.as_str()) => {}
@@ -202,7 +235,7 @@ pub fn load(src: &Path, all: &[String], code: &[String], excluded: &[String], te
             }
         }
     }
-    for v in [&mut out.reports, &mut out.unresolved, &mut out.errors] { v.sort(); v.dedup(); }
+    for v in [&mut out.reports, &mut out.unresolved, &mut out.errors, &mut out.error_details] { v.sort(); v.dedup(); }
     out
 }
 
@@ -276,8 +309,58 @@ mod tests {
         assert_eq!(resolve("build/x/a.py", &files), None);
     }
 
+    #[test]
+    fn kotlin_report_path_without_root_package_dir_resolves_by_trailing_components() {
+        let files = vec!["svc/src/main/kotlin/net/A.kt".to_string(), "svc/src/main/kotlin/net/B.kt".to_string()];
+        assert_eq!(resolve("org/acme/net/A.kt", &files).as_deref(), Some("svc/src/main/kotlin/net/A.kt"));
+        // 전체 접미사 일치가 있으면 그쪽이 우선한다.
+        let files = vec!["src/main/kotlin/org/acme/net/A.kt".to_string(), "other/net/A.kt".to_string()];
+        assert_eq!(resolve("org/acme/net/A.kt", &files).as_deref(), Some("src/main/kotlin/org/acme/net/A.kt"));
+    }
+
+    #[test]
+    fn kotlin_fallback_rejects_basename_only_and_ambiguous() {
+        let files = vec!["src/main/kotlin/x/A.kt".to_string()];
+        assert_eq!(resolve("org/acme/net/A.kt", &files), None);
+        let files = vec!["m1/net/A.kt".to_string(), "m2/net/A.kt".to_string()];
+        assert_eq!(resolve("org/acme/net/A.kt", &files), None);
+        // 더 길게 일치하는 쪽이 있으면 모호하지 않다.
+        let files = vec!["m1/acme/net/A.kt".to_string(), "m2/net/A.kt".to_string()];
+        assert_eq!(resolve("org/acme/net/A.kt", &files).as_deref(), Some("m1/acme/net/A.kt"));
+    }
+
+    #[test]
+    fn kotlin_fallback_skips_excluded_and_test_files() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(d.path().join("coverage")).unwrap();
+        std::fs::write(d.path().join("coverage/lcov.info"), "SF:org/acme/net/A.kt\nDA:1,1\nend_of_record\n").unwrap();
+        // 제외 파일이 더 길게 일치하면 그 파일의 기록이다.
+        let l = load_in(d.path(), &["src/net/A.kt".to_string()], &["gen/acme/net/A.kt".to_string()], &[]);
+        assert!(l.map.is_empty() && l.unresolved.is_empty());
+        let l = load_in(d.path(), &["src/test/kotlin/net/A.kt".to_string()], &[], &["**/src/test/**"]);
+        assert!(l.map.is_empty() && l.unresolved.is_empty());
+    }
+
+    #[test]
+    fn missing_line_numbers_are_skipped_not_recorded_as_line_zero() {
+        let j = "<report name=\"r\"><package name=\"p\"><sourcefile name=\"A.java\"><line ci=\"1\"/><line nr=\"x\" ci=\"1\"/><line nr=\"2\" ci=\"1\"/></sourcefile></package></report>";
+        let m = parse_jacoco(j).unwrap();
+        assert_eq!(m["p/A.java"].keys().copied().collect::<Vec<_>>(), vec![2]);
+        let c = "<coverage><classes><class filename=\"a.py\"><lines><line hits=\"1\"/><line number=\"\" hits=\"1\"/><line number=\"3\" hits=\"1\"/></lines></class></classes></coverage>";
+        let m = parse_cobertura(c).unwrap();
+        assert_eq!(m["a.py"].keys().copied().collect::<Vec<_>>(), vec![3]);
+    }
+
+    #[test]
+    fn xml_entities_in_file_names_are_decoded() {
+        let j = "<report name=\"r\"><package name=\"a\"><sourcefile name=\"A&amp;B.java\"><line nr=\"1\" ci=\"1\"/></sourcefile></package></report>";
+        assert!(parse_jacoco(j).unwrap().contains_key("a/A&B.java"));
+        let c = "<coverage><class filename=\"x&amp;y.py\"><line number=\"1\" hits=\"1\"/></class></coverage>";
+        assert!(parse_cobertura(c).unwrap().contains_key("x&y.py"));
+    }
+
     fn load_in(d: &Path, code: &[String], excluded: &[String], tests: &[&str]) -> Loaded {
-        let all = crate::fsutil::walk(d).unwrap();
+        let all = crate::fsutil::walk(d, &crate::fsutil::globset(&[]).unwrap()).unwrap();
         let tests = crate::fsutil::globset(&tests.iter().map(|s| s.to_string()).collect::<Vec<_>>()).unwrap();
         load(d, &all, code, excluded, &tests, &CoverageCfg::default())
     }
@@ -313,6 +396,8 @@ mod tests {
         let l = load_in(d.path(), &files, &[], &[]);
         assert_eq!(l.reports, vec!["coverage/lcov.info".to_string()]);
         assert_eq!(l.errors, vec!["coverage.xml".to_string()]);
+        assert_eq!(l.error_details.len(), 1);
+        assert!(l.error_details[0].starts_with("coverage.xml: ") && l.error_details[0].len() > "coverage.xml: ".len());
         assert!(l.map.contains_key("src/App.tsx"));
     }
 
