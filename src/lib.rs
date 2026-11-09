@@ -2,6 +2,7 @@ pub mod catalog;
 pub mod config;
 pub mod coverage;
 pub mod dup;
+pub mod fetch;
 pub mod fsutil;
 pub mod gate;
 pub mod gatecalc;

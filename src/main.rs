@@ -10,6 +10,18 @@ struct Cli { #[command(subcommand)] cmd: Cmd }
 
 #[derive(Subcommand)]
 enum Cmd {
+    /// 설정 저장소에서 대상 저장소에 쓸 설정을 받아 검증하고 --out에 씁니다. --commit이 있으면 신규 코드 범위(newcode.json)도 계산합니다.
+    FetchConfig {
+        #[arg(long)] repo: String,
+        #[arg(long)] branch: String,
+        /// 스캔할 커밋의 전체 sha. 얕은 클론의 신규 코드 계산에 씁니다.
+        #[arg(long)] commit: Option<String>,
+        #[arg(long)] config_repo: String,
+        #[arg(long = "ref", default_value = "main")] git_ref: String,
+        #[arg(long)] out: PathBuf,
+        /// 대상 저장소 이력을 받을 디렉터리(기본: --out의 상위 디렉터리의 history).
+        #[arg(long)] history_dir: Option<PathBuf>,
+    },
     /// 설정 디렉터리(fetch-config 출력)의 설정으로 코드를 스캔해 result.json을 씁니다. 네트워크가 필요 없습니다.
     Scan {
         #[arg(long, default_value = "/src")] src: PathBuf,
@@ -81,8 +93,41 @@ fn validate_config(dir: &Path) -> Result<i32> {
     }
 }
 
+struct FetchArgs { repo: String, branch: String, commit: Option<String>, config_repo: String, git_ref: String, out: PathBuf, history_dir: Option<PathBuf> }
+
+/// `GitHistory`(credential 임시 파일을 가진 `GitEnv` 포함)는 이 함수가 끝날 때 drop된다.
+/// 프로세스 종료(`std::process::exit`)는 그 뒤 `main`에서만 한다.
+fn do_fetch(a: FetchArgs) -> Result<()> {
+    use qualgate::fetch::{self, FetchRequest, GitHistory, GiteaConfig, HistorySource};
+    let base = std::env::var("GITEA_URL").context("GITEA_URL 환경 변수가 필요합니다")?;
+    let auth = qualgate::httpcfg::resolve_auth(&base)?;
+    let catalog = load_catalog()?;
+    let client = Client::new(&base, &a.config_repo, auth.clone(), qualgate::httpcfg::agent()?);
+    let mut cfg = GiteaConfig::new(client, &a.config_repo, &a.git_ref);
+    let mut hist = match &a.commit {
+        Some(c) => {
+            let dir = a.history_dir.clone().unwrap_or_else(|| a.out.parent().unwrap_or(Path::new(".")).join("history"));
+            let env = qualgate::httpcfg::git_env(&auth, &base, &std::env::temp_dir())?;
+            Some(GitHistory::new(qualgate::httpcfg::clone_url(&base, &a.repo)?, a.branch.clone(), c.clone(), dir, env))
+        }
+        None => None,
+    };
+    let req = FetchRequest {
+        repo: a.repo, branch: a.branch, commit: a.commit, config_repo: a.config_repo, git_ref: a.git_ref,
+        now: std::time::SystemTime::now(),
+    };
+    fetch::fetch(&mut cfg, hist.as_mut().map(|h| h as &mut dyn HistorySource), &req, &catalog, &a.out)?;
+    println!("설정을 {}에 썼습니다{}", a.out.display(),
+        if a.out.join("newcode.json").exists() { " (newcode.json 포함)" } else { "" });
+    Ok(())
+}
+
 fn run(cli: Cli) -> Result<i32> {
     match cli.cmd {
+        Cmd::FetchConfig { repo, branch, commit, config_repo, git_ref, out, history_dir } => {
+            do_fetch(FetchArgs { repo, branch, commit, config_repo, git_ref, out, history_dir })?;
+            Ok(0)
+        }
         Cmd::Scan { src, config, out } => { do_scan(&src, &config, &out)?; Ok(0) }
         Cmd::Publish { repo, out } => { let r = load_result(&out)?; do_publish(&r, &repo)?; Ok(0) }
         Cmd::ValidateConfig { config_dir } => validate_config(&config_dir),

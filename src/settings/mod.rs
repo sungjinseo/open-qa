@@ -8,6 +8,7 @@ pub use global::Global;
 pub use project::Project;
 pub use ruleset::{LanguageSel, RuleOverride, Ruleset};
 pub use validate::{load_dir_all, resolve};
+pub(crate) use validate::{valid_repo, valid_ruleset_name};
 
 use serde::{Deserialize, Serialize};
 use std::fmt;

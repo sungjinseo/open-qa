@@ -201,6 +201,12 @@ impl GitEnv {
     pub fn apply(&self, cmd: &mut std::process::Command) {
         for (k, v) in self.vars() { cmd.env(k, v); }
     }
+
+    /// 인증·TLS 설정이 없는 환경(로컬 file:// 저장소 테스트용).
+    #[cfg(test)]
+    pub(crate) fn empty() -> GitEnv {
+        GitEnv { vars: vec![("GIT_TERMINAL_PROMPT".to_string(), Secret("0".into()))], _store: None }
+    }
 }
 
 impl std::fmt::Debug for GitEnv {

@@ -27,7 +27,7 @@ pub fn read_newcode_json(path: &Path) -> Result<Option<NewCodeFile>> {
     serde_json::from_str(&text).map(Some).with_context(|| format!("{} 형식 오류", path.display()))
 }
 
-fn git(src: &Path, args: &[&str]) -> Result<String> {
+pub(crate) fn git(src: &Path, args: &[&str]) -> Result<String> {
     let o = Command::new("git").env_remove("GITEA_TOKEN").args(["-c", "safe.directory=*", "-C"]).arg(src).args(args).output().context("git 실행 실패")?;
     if !o.status.success() { bail!("git {args:?}: {}", String::from_utf8_lossy(&o.stderr)); }
     Ok(String::from_utf8_lossy(&o.stdout).into_owned())
@@ -51,7 +51,7 @@ fn parse_hunk(line: &str) -> Option<(u32, u32, u32)> {
 /// 변경된 줄과, 따옴표로 감싼 파일 경로(줄 번호를 파일에 연결할 수 없음)를 만났는지.
 /// 헤더(`+++ `)는 hunk 밖에서만 인정한다. 줄 수로 hunk 본문을 건너뛰므로 내용이 `++ b/x`인 추가 줄
 /// (`+++ b/x`로 보임)이 파일 헤더로 오인되지 않는다.
-fn parse_diff_ex(diff: &str) -> (ChangedLines, bool) {
+pub fn parse_diff_ex(diff: &str) -> (ChangedLines, bool) {
     let mut out = ChangedLines::new();
     let mut quoted = false;
     let mut file: Option<String> = None;

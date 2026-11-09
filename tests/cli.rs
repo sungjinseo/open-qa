@@ -453,3 +453,103 @@ fn malformed_newcode_json_exits_2() {
     assert!(String::from_utf8_lossy(&o.stderr).contains("newcode.json"), "{}", String::from_utf8_lossy(&o.stderr));
     assert!(!out.path().join("result.json").exists());
 }
+
+const CFG_SHA: &str = "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00";
+
+/// 설정 저장소 qg/cfg(커밋 CFG_SHA)의 `files`만 아는 가짜 Gitea. 그 밖의 요청(git 클론 포함)은 404.
+/// 받은 요청마다 "요청 줄 | Authorization 헤더"를 기록한다.
+fn fake_config_gitea(files: Vec<(&'static str, String)>) -> (String, std::sync::Arc<Mutex<Vec<String>>>) {
+    use base64::Engine;
+    use std::io::{Read, Write};
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", l.local_addr().unwrap());
+    let log = std::sync::Arc::new(Mutex::new(vec![]));
+    let seen = log.clone();
+    std::thread::spawn(move || {
+        for s in l.incoming() {
+            let Ok(mut s) = s else { return };
+            let mut buf = vec![];
+            let mut b = [0u8; 4096];
+            while !buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                match s.read(&mut b) { Ok(0) | Err(_) => break, Ok(n) => buf.extend_from_slice(&b[..n]) }
+            }
+            let text = String::from_utf8_lossy(&buf).to_string();
+            let line = text.lines().next().unwrap_or("").to_string();
+            let auth = text.lines().find_map(|l| l.split_once(':').filter(|(k, _)| k.eq_ignore_ascii_case("authorization")).map(|(_, v)| v.trim().to_string())).unwrap_or_default();
+            seen.lock().unwrap().push(format!("{line} | {auth}"));
+            let path = line.split_whitespace().nth(1).unwrap_or("");
+            let contents = "/api/v1/repos/qg/cfg/contents/";
+            let body = if path == "/api/v1/repos/qg/cfg/commits?sha=main&limit=1" {
+                Some(format!(r#"[{{"sha":"{CFG_SHA}"}}]"#))
+            } else if let Some(rest) = path.strip_prefix(contents).and_then(|r| r.strip_suffix(&format!("?ref={CFG_SHA}"))) {
+                files.iter().find(|(p, _)| *p == rest).map(|(_, c)| {
+                    let enc = base64::engine::general_purpose::STANDARD.encode(c);
+                    format!(r#"{{"type":"file","encoding":"base64","content":"{enc}","sha":"blob"}}"#)
+                })
+            } else { None };
+            let (status, body) = match body { Some(b) => ("200 OK", b), None => ("404 Not Found", r#"{"message":"not found"}"#.to_string()) };
+            let _ = write!(s, "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+        }
+    });
+    (url, log)
+}
+
+fn scan_fixture_files() -> Vec<(&'static str, String)> {
+    ["qualgate.toml", "rulesets/std.toml", "projects/o/r.toml"].into_iter()
+        .map(|p| (p, std::fs::read_to_string(fixture_cfg("scan").join(p)).unwrap())).collect()
+}
+
+fn fetch_cmd(url: &str, token: &str, out: &Path) -> Command {
+    let mut c = bin();
+    c.args(["fetch-config", "--repo", "o/r", "--branch", "main", "--config-repo", "qg/cfg", "--out"]).arg(out)
+        .env("GITEA_URL", url).env("GITEA_TOKEN", token).env("QUALGATE_RULES", rules_dir())
+        .env_remove("QUALGATE_GIT_CREDENTIALS").env_remove("QUALGATE_CA_FILE").env_remove("QUALGATE_SSL_VERIFY");
+    c
+}
+
+#[test]
+fn fetch_config_writes_config_from_gitea_and_warns_when_history_is_unavailable() {
+    let (url, log) = fake_config_gitea(scan_fixture_files());
+    let t = tempfile::tempdir().unwrap();
+    let out = t.path().join("config");
+    let token = "tok3n-not-printed";
+    let o = fetch_cmd(&url, token, &out).args(["--commit", "0123456789abcdef0123456789abcdef01234567"]).output().unwrap();
+    let (stdout, stderr) = (String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
+    assert_eq!(o.status.code(), Some(0), "{stderr}");
+    assert!(!stdout.contains(token) && !stderr.contains(token), "{stdout}{stderr}");
+    assert!(stderr.contains("경고"), "{stderr}");
+    for f in ["qualgate.toml", "rulesets/std.toml", "projects/o/r.toml", "source.json"] { assert!(out.join(f).is_file(), "{f}"); }
+    assert!(!out.join("newcode.json").exists());
+    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(out.join("source.json")).unwrap()).unwrap();
+    assert_eq!(v, serde_json::json!({"config_repo": "qg/cfg", "ref": "main", "config_commit": CFG_SHA, "repo": "o/r", "branch": "main", "registered": true}));
+    let log = log.lock().unwrap().clone();
+    // 모든 API 호출은 토큰으로 인증하고 같은 설정 커밋에서 파일을 읽는다.
+    let api: Vec<_> = log.iter().filter(|l| l.contains("/api/v1/")).collect();
+    assert!(api.iter().all(|l| l.ends_with(&format!("| token {token}"))), "{log:?}");
+    assert!(api.iter().filter(|l| l.contains("/contents/")).all(|l| l.contains(&format!("?ref={CFG_SHA} "))), "{log:?}");
+    // git 클론은 GITEA_URL 아래 대상 저장소로 가고, 토큰은 인자가 아닌 헤더로 전달된다.
+    assert!(log.iter().any(|l| l.starts_with("GET /o/r.git/info/refs") && l.ends_with(&format!("| token {token}"))), "{log:?}");
+}
+
+#[test]
+fn fetch_config_without_global_config_exits_2() {
+    let (url, _log) = fake_config_gitea(vec![]);
+    let t = tempfile::tempdir().unwrap();
+    let out = t.path().join("config");
+    let o = fetch_cmd(&url, "t", &out).output().unwrap();
+    assert_eq!(o.status.code(), Some(2));
+    let e = String::from_utf8_lossy(&o.stderr);
+    assert!(e.contains("qualgate.toml") && e.contains("qg/cfg"), "{e}");
+    assert!(!out.exists());
+}
+
+#[test]
+fn fetch_config_refuses_non_empty_out() {
+    let (url, _log) = fake_config_gitea(scan_fixture_files());
+    let t = tempfile::tempdir().unwrap();
+    std::fs::write(t.path().join("keep.txt"), "x").unwrap();
+    let o = fetch_cmd(&url, "t", t.path()).output().unwrap();
+    assert_eq!(o.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("비어 있지"));
+    assert!(!t.path().join("qualgate.toml").exists());
+}

@@ -90,7 +90,7 @@ fn validate_gate(file: &str, gate: &[GateCondition], errs: &mut Errs) {
         }
     }
 }
-fn valid_ruleset_name(n: &str) -> bool {
+pub(crate) fn valid_ruleset_name(n: &str) -> bool {
     let b = n.as_bytes();
     !b.is_empty()
         && b.len() <= 63
@@ -267,7 +267,7 @@ pub fn load_dir_all(dir: &Path, catalog: &Catalog) -> Result<(), Vec<ConfigError
     if errs.is_empty() { Ok(()) } else { Err(errs) }
 }
 
-fn valid_repo(repo: &str) -> bool {
+pub(crate) fn valid_repo(repo: &str) -> bool {
     let ok = |s: &str| {
         !s.is_empty() && s != "." && s != ".." && s.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.'))
     };
