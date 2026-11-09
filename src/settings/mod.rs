@@ -9,10 +9,10 @@ pub use project::Project;
 pub use ruleset::{LanguageSel, RuleOverride, Ruleset};
 pub use validate::{load_dir_all, resolve};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Metric {
     NewIssues,
@@ -24,11 +24,11 @@ pub enum Metric {
     DuplicatedLines,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Op { Gt, Lt }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GateCondition { pub metric: Metric, pub op: Op, pub value: f64 }
 
@@ -50,3 +50,18 @@ impl std::error::Error for ConfigError {}
 
 #[derive(Debug, Clone)]
 pub struct Resolved { pub global: Global, pub ruleset: Ruleset, pub project: Project, pub registered: bool }
+
+impl Metric {
+    /// 설정 파일에 쓰는 이름.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Metric::NewIssues => "new_issues",
+            Metric::NewHotspotsReviewed => "new_hotspots_reviewed",
+            Metric::NewCoverage => "new_coverage",
+            Metric::NewDuplicatedLines => "new_duplicated_lines",
+            Metric::Issues => "issues",
+            Metric::Coverage => "coverage",
+            Metric::DuplicatedLines => "duplicated_lines",
+        }
+    }
+}

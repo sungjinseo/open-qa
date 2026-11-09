@@ -8,6 +8,9 @@ use std::path::Path;
 /// 규칙 디렉터리 이름.
 const LANG_DIRS: [&str; 7] = ["java", "kotlin", "python", "go", "ts", "react", "vue"];
 
+/// 건수 지표 값의 상한.
+const MAX_COUNT: f64 = 1_000_000.0;
+
 type Errs = Vec<ConfigError>;
 
 fn err(errs: &mut Errs, file: &str, message: impl Into<String>) {
@@ -18,6 +21,16 @@ fn err(errs: &mut Errs, file: &str, message: impl Into<String>) {
 /// 파서 오류는 원문 줄을 포함하므로 위치만 알린다.
 fn read<T: DeserializeOwned>(dir: &Path, rel: &str, errs: &mut Errs) -> Option<T> {
     let p = dir.join(rel);
+    // 상위 디렉터리(rulesets, projects, <owner>)가 링크면 파일 검사만으로는 막을 수 없다.
+    let mut prefix = String::new();
+    for part in rel.split('/').rev().skip(1).collect::<Vec<_>>().into_iter().rev() {
+        if !prefix.is_empty() { prefix.push('/'); }
+        prefix.push_str(part);
+        if std::fs::symlink_metadata(dir.join(&prefix)).is_ok_and(|m| m.file_type().is_symlink()) {
+            err(errs, &prefix, "일반 디렉터리여야 합니다 (심볼릭 링크 불가)");
+            return None;
+        }
+    }
     let meta = match std::fs::symlink_metadata(&p) {
         Ok(m) => m,
         Err(e) => {
@@ -39,8 +52,13 @@ fn read<T: DeserializeOwned>(dir: &Path, rel: &str, errs: &mut Errs) -> Option<T
     match toml::from_str(&text) {
         Ok(v) => Some(v),
         Err(e) => {
-            let (line, col) = e.span().map_or((0, 0), |r| position(&text, r.start));
-            err(errs, rel, format!("형식 오류 (줄 {line}, 열 {col})"));
+            match e.span() {
+                Some(r) => {
+                    let (line, col) = position(&text, r.start);
+                    err(errs, rel, format!("형식 오류 (줄 {line}, 열 {col})"));
+                }
+                None => err(errs, rel, "형식 오류"),
+            }
             None
         }
     }
@@ -57,19 +75,21 @@ fn is_ratio(m: Metric) -> bool {
 fn validate_gate(file: &str, gate: &[GateCondition], errs: &mut Errs) {
     let mut seen = BTreeSet::new();
     for c in gate {
+        let m = c.metric.as_str();
         if !seen.insert(c.metric) {
-            err(errs, file, format!("지표 {:?}이(가) 두 번 쓰였습니다", c.metric));
+            err(errs, file, format!("지표 {m}이(가) 두 번 쓰였습니다"));
         }
         if !c.value.is_finite() || c.value < 0.0 {
-            err(errs, file, format!("지표 {:?}의 값은 0 이상의 수여야 합니다", c.metric));
+            err(errs, file, format!("지표 {m}의 값은 0 이상의 수여야 합니다"));
         } else if is_ratio(c.metric) {
-            if c.value > 100.0 { err(errs, file, format!("지표 {:?}의 값은 0~100이어야 합니다", c.metric)); }
+            if c.value > 100.0 { err(errs, file, format!("지표 {m}의 값은 0~100이어야 합니다")); }
         } else if c.value.fract() != 0.0 {
-            err(errs, file, format!("지표 {:?}의 값은 정수여야 합니다", c.metric));
+            err(errs, file, format!("지표 {m}의 값은 정수여야 합니다"));
+        } else if c.value > MAX_COUNT {
+            err(errs, file, format!("지표 {m}의 값은 {MAX_COUNT} 이하여야 합니다"));
         }
     }
 }
-
 fn valid_ruleset_name(n: &str) -> bool {
     let b = n.as_bytes();
     !b.is_empty()
@@ -114,38 +134,88 @@ fn validate_project(file: &str, expected_repo: &str, p: &mut Project, errs: &mut
             if !LANG_DIRS.contains(&l.as_str()) { err(errs, file, format!("languages: 알 수 없는 규칙 디렉터리 {l}")); }
         }
     }
+    if !(1..=3650).contains(&p.new_code_days) {
+        err(errs, file, format!("new_code_days는 1~3650이어야 합니다 (현재 {})", p.new_code_days));
+    }
     validate_gate(file, &p.gate, errs);
     if let Err(e) = validate_dup(&p.duplication) { err(errs, file, e.to_string()); }
     if let Err(e) = validate_publish(&mut p.publish) { err(errs, file, e.to_string()); }
 }
 
-fn ruleset_stems(dir: &Path) -> Vec<String> {
-    let mut v: Vec<String> = std::fs::read_dir(dir.join("rulesets"))
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|e| e.file_name().to_str()?.strip_suffix(".toml").map(str::to_string))
-        .collect();
-    v.sort();
-    v
-}
-
-fn project_repos(dir: &Path) -> Vec<String> {
+/// 설정 디렉터리 하나의 항목을 읽는다. 디렉터리가 없으면 비어 있는 것으로 본다.
+/// 심볼릭 링크는 따라가지 않는다. 반환: (이름, 디렉터리 여부).
+fn list(dir: &Path, rel: &str, errs: &mut Errs) -> Vec<(String, bool)> {
+    let p = dir.join(rel);
+    match std::fs::symlink_metadata(&p) {
+        Ok(m) if m.is_dir() => {}
+        Ok(_) => {
+            err(errs, rel, "일반 디렉터리여야 합니다 (심볼릭 링크 불가)");
+            return Vec::new();
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Vec::new(),
+        Err(e) => {
+            err(errs, rel, format!("읽기 실패 ({})", e.kind()));
+            return Vec::new();
+        }
+    }
+    let rd = match std::fs::read_dir(&p) {
+        Ok(r) => r,
+        Err(e) => {
+            err(errs, rel, format!("읽기 실패 ({})", e.kind()));
+            return Vec::new();
+        }
+    };
     let mut v = Vec::new();
-    for owner in std::fs::read_dir(dir.join("projects")).into_iter().flatten().flatten() {
-        let Some(o) = owner.file_name().to_str().map(str::to_string) else { continue };
-        for f in std::fs::read_dir(owner.path()).into_iter().flatten().flatten() {
-            if let Some(r) = f.file_name().to_str().and_then(|n| n.strip_suffix(".toml")) {
-                v.push(format!("{o}/{r}"));
-            }
+    for e in rd.flatten() {
+        let Some(name) = e.file_name().to_str().map(str::to_string) else {
+            err(errs, rel, "UTF-8이 아닌 파일 이름");
+            continue;
+        };
+        match e.file_type() {
+            Ok(t) if t.is_dir() => v.push((name, true)),
+            Ok(t) if t.is_file() => v.push((name, false)),
+            _ => err(errs, &format!("{rel}/{name}"), "일반 파일 또는 디렉터리여야 합니다 (심볼릭 링크 불가)"),
         }
     }
     v.sort();
     v
 }
 
+fn ruleset_stems(dir: &Path, errs: &mut Errs) -> Vec<String> {
+    let mut v = Vec::new();
+    for (n, is_dir) in list(dir, "rulesets", errs) {
+        match n.strip_suffix(".toml") {
+            Some(s) if !is_dir => v.push(s.to_string()),
+            _ => err(errs, &format!("rulesets/{n}"), "예상하지 못한 항목 (룰셋은 <name>.toml 파일이어야 합니다)"),
+        }
+    }
+    v
+}
+
+fn project_repos(dir: &Path, errs: &mut Errs) -> Vec<String> {
+    let mut v = Vec::new();
+    for (o, is_dir) in list(dir, "projects", errs) {
+        if !is_dir {
+            err(errs, &format!("projects/{o}"), "예상하지 못한 항목 (projects/<owner>/<repo>.toml 형식이어야 합니다)");
+            continue;
+        }
+        for (n, is_dir) in list(dir, &format!("projects/{o}"), errs) {
+            match n.strip_suffix(".toml") {
+                Some(r) if !is_dir => v.push(format!("{o}/{r}")),
+                _ => err(errs, &format!("projects/{o}/{n}"), "예상하지 못한 항목 (<repo>.toml 파일이어야 합니다)"),
+            }
+        }
+    }
+    v
+}
+
 fn load_ruleset(dir: &Path, name: &str, catalog: &Catalog, errs: &mut Errs) -> Option<Ruleset> {
     let file = format!("rulesets/{name}.toml");
+    // 이름이 경로가 되므로 읽기 전에 검사한다. 프로젝트 파일이 `../`를 넣을 수 있다.
+    if !valid_ruleset_name(name) {
+        err(errs, &file, format!("룰셋 이름 규칙 위반: {name}"));
+        return None;
+    }
     let r: Ruleset = read(dir, &file, errs)?;
     validate_ruleset(&file, name, &r, catalog, errs);
     Some(r)
@@ -168,7 +238,7 @@ fn load_global(dir: &Path, errs: &mut Errs) -> Option<Global> {
 pub fn load_dir_all(dir: &Path, catalog: &Catalog) -> Result<(), Vec<ConfigError>> {
     let mut errs = Vec::new();
     let global = load_global(dir, &mut errs);
-    let names = ruleset_stems(dir);
+    let names = ruleset_stems(dir, &mut errs);
     for n in &names {
         load_ruleset(dir, n, catalog, &mut errs);
     }
@@ -177,7 +247,7 @@ pub fn load_dir_all(dir: &Path, catalog: &Catalog) -> Result<(), Vec<ConfigError
             err(&mut errs, "qualgate.toml", format!("default_ruleset '{}' 룰셋이 없습니다", g.default_ruleset));
         }
     }
-    for repo in project_repos(dir) {
+    for repo in project_repos(dir, &mut errs) {
         if let Some(p) = load_project(dir, &repo, &mut errs) {
             if !names.contains(&p.ruleset) {
                 err(&mut errs, &format!("projects/{repo}.toml"), format!("ruleset '{}' 룰셋이 없습니다", p.ruleset));
@@ -435,5 +505,104 @@ mod tests {
         let e = errors(d.path());
         assert!(has(&e, "rulesets/x.toml", "줄 2"), "{e:?}");
         assert!(!e.iter().any(|x| x.message.contains("secret-value-xyz")));
+    }
+
+    #[test]
+    fn ruleset_name_is_checked_before_reading() {
+        let outer = tempfile::tempdir().unwrap();
+        let cfg = outer.path().join("cfg");
+        copy_dir(&fixtures("good", ""), &cfg);
+        put(outer.path(), "x/y.toml", "schema = 1\nname = \"y\"\n");
+        put(&cfg, "projects/team-a/evil.toml", "schema = 1\nrepo = \"team-a/evil\"\nruleset = \"../../x/y\"\n");
+        let e = resolve(&cfg, "team-a/evil", &catalog()).unwrap_err();
+        assert!(has(&e, "rulesets/../../x/y.toml", "이름 규칙"), "{e:?}");
+        assert!(!e.iter().any(|x| x.message.contains("파일 이름")), "file was read: {e:?}");
+        put(&cfg, "qualgate.toml", "schema = 1\ndefault_ruleset = \"../../x/y\"\n");
+        let e = resolve(&cfg, "team-z/new", &catalog()).unwrap_err();
+        assert!(!e.iter().any(|x| x.message.contains("파일 이름")), "file was read: {e:?}");
+    }
+
+    #[test]
+    fn unknown_keys_in_project_sections_are_errors() {
+        for sec in ["scan", "coverage", "duplication", "publish"] {
+            let d = good_copy();
+            put(d.path(), "projects/team-a/other.toml",
+                &format!("schema = 1\nrepo = \"team-a/other\"\nruleset = \"backend-standard\"\n[{sec}]\nbogus = 1\n"));
+            assert!(has(&errors(d.path()), "projects/team-a/other.toml", "형식 오류"), "{sec}");
+        }
+    }
+
+    #[test]
+    fn severity_accepts_only_known_names() {
+        let d = good_copy();
+        put(d.path(), "rulesets/x.toml", &format!("{X_OK}[overrides.\"java.system-out\"]\nseverity = \"blocker\"\n"));
+        assert!(has(&errors(d.path()), "rulesets/x.toml", "형식 오류"));
+        put(d.path(), "rulesets/x.toml", &format!("{X_OK}[overrides.\"java.system-out\"]\nseverity = \"critical\"\nkind = \"hotspot\"\n"));
+        load_dir_all(d.path(), &catalog()).unwrap();
+    }
+
+    #[test]
+    fn empty_default_ruleset_is_ok_for_full_validation_but_missing_target_is_not() {
+        let d = good_copy();
+        put(d.path(), "qualgate.toml", "schema = 1\ndefault_ruleset = \"\"\n");
+        load_dir_all(d.path(), &catalog()).unwrap();
+        put(d.path(), "qualgate.toml", "schema = 1\ndefault_ruleset = \"ghost\"\n");
+        assert!(has(&errors(d.path()), "qualgate.toml", "ghost"));
+    }
+
+    #[test]
+    fn count_metric_has_upper_bound() {
+        assert!(has(&gate_errors(&cond("issues", "1e12")), "qualgate.toml", "이하"));
+    }
+
+    #[test]
+    fn new_code_days_range() {
+        for (v, bad) in [("0", true), ("3651", true), ("1", false), ("3650", false)] {
+            let d = good_copy();
+            put(d.path(), "projects/team-a/other.toml",
+                &format!("schema = 1\nrepo = \"team-a/other\"\nruleset = \"backend-standard\"\nnew_code_days = {v}\n"));
+            assert_eq!(load_dir_all(d.path(), &catalog()).is_err(), bad, "{v}");
+        }
+    }
+
+    #[test]
+    fn error_messages_use_config_spelling_and_omit_missing_position() {
+        let e = gate_errors(&format!("{}{}", cond("new_issues", "0"), cond("new_issues", "1")));
+        assert!(e.iter().any(|x| x.message.contains("new_issues")), "{e:?}");
+        assert!(!e.iter().any(|x| x.message.contains("NewIssues")), "{e:?}");
+    }
+
+    #[test]
+    fn unexpected_entries_are_errors() {
+        let d = good_copy();
+        put(d.path(), "projects/stray.toml", "schema = 1\n");
+        put(d.path(), "projects/team-a/notes.txt", "x");
+        put(d.path(), "rulesets/readme.md", "x");
+        let e = errors(d.path());
+        assert!(has(&e, "projects/stray.toml", "예상하지 못한"), "{e:?}");
+        assert!(has(&e, "projects/team-a/notes.txt", "예상하지 못한"), "{e:?}");
+        assert!(has(&e, "rulesets/readme.md", "예상하지 못한"), "{e:?}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinks_are_rejected() {
+        use std::os::unix::fs::symlink;
+        let d = good_copy();
+        let outside = tempfile::tempdir().unwrap();
+        put(outside.path(), "o/r.toml", "schema = 1\n");
+        std::fs::remove_dir_all(d.path().join("projects")).unwrap();
+        symlink(outside.path(), d.path().join("projects")).unwrap();
+        assert!(has(&errors(d.path()), "projects", "심볼릭"));
+
+        let d = good_copy();
+        symlink(outside.path().join("o"), d.path().join("projects/linked-owner")).unwrap();
+        assert!(has(&errors(d.path()), "projects/linked-owner", "심볼릭"));
+
+        let d = good_copy();
+        std::fs::remove_file(d.path().join("qualgate.toml")).unwrap();
+        put(outside.path(), "g.toml", "schema = 1\n");
+        symlink(outside.path().join("g.toml"), d.path().join("qualgate.toml")).unwrap();
+        assert!(has(&errors(d.path()), "qualgate.toml", "심볼릭"));
     }
 }
