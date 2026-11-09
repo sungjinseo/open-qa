@@ -4,7 +4,17 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1
 cd "$(dirname "$0")"
 fail=0
-for lang in java kotlin python react vue go; do
+# 언어:기대 규칙(쉼표):Bad 파일(리포트가 해석해야 하는 파일)
+SAMPLES=(
+  "java:java.system-out:src/main/java/a/Bad.java"
+  "kotlin:kotlin.catch-throwable,kotlin.println:src/main/kotlin/a/Bad.kt"
+  "python:python.eval:pkg/bad.py"
+  "react:react.eval:src/Bad.tsx"
+  "vue:vue.eval:src/Bad.vue"
+  "go:go.ignored-error:pkg/bad.go"
+)
+for sample in "${SAMPLES[@]}"; do
+  IFS=: read -r lang rules badfile <<< "$sample"
   work="$(mktemp -d)"; out="$(mktemp -d)"
   cp -r "repos/$lang/." "$work"
   w="$(cd "$work" && (pwd -W 2>/dev/null || pwd))"; o="$(cd "$out" && (pwd -W 2>/dev/null || pwd))"
@@ -17,14 +27,20 @@ for lang in java kotlin python react vue go; do
   code=$?
   set -e
   if [ "$code" -gt 1 ]; then echo "FAIL $lang exit=$code"; fail=1; continue; fi
-  python -I - "$o/result.json" "$lang" <<'PY' || fail=1
+  python -I - "$o/result.json" "$lang" "$rules" "$badfile" <<'PY' || fail=1
 import json, sys
 r = json.load(open(sys.argv[1], encoding="utf-8"))
-lang = sys.argv[2]
+lang, rules, badfile = sys.argv[2], sys.argv[3].split(","), sys.argv[4]
 errs = []
 if not r["findings"]: errs.append("위반 없음")
+found = {(f["rule"], f["file"]) for f in r["findings"]}
+for rule in rules:
+    if (rule, badfile) not in found: errs.append(f"기대한 규칙 없음 {rule}")
 if not r["clones"]: errs.append("중복 없음")
 if r["metrics"]["coverage"] is None: errs.append("커버리지 없음")
+cs = r["coverage_status"]
+if cs["unresolved"]: errs.append(f"리포트 경로 매칭 실패 {cs['unresolved']}")
+if badfile in cs["not_in_report"]: errs.append(f"리포트가 {badfile}을 해석하지 못함")
 if r["unanalyzed"]: errs.append(f"분석 실패 {r['unanalyzed']}")
 print(lang, "OK" if not errs else "FAIL " + "; ".join(errs),
       len(r["findings"]), len(r["clones"]), r["metrics"]["coverage"])
