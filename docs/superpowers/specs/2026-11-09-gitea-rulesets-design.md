@@ -254,11 +254,10 @@ spec:
 - 설정 저장소에서 `qualgate.toml`, `projects/<repo>.toml`(없으면 미등록), 사용할 룰셋 파일만 Gitea 파일 API로 받는다.
 - 받은 파일을 같은 검증 코드로 검사하고, 실패하면 종료 코드 2.
 - `--out`에 세 파일과 `source.json`(설정 저장소, ref, 커밋 sha, 미등록 여부)을 쓴다.
-- 신규 코드 변경 줄: `--src`의 git 이력이 신규 코드 기간을 덮으면 `scan`이 기존처럼 git으로 계산한다. 얕은 클론이거나 기준 커밋이 없으면 `fetch-config`가 Gitea API로 계산해 `newcode.json`(기준 커밋, HEAD 커밋, 파일별 변경 줄)을 쓴다.
-  - 기준 커밋: 대상 브랜치에서 `new_code_days`일 전 이전의 마지막 커밋(커밋 목록 API의 `until`).
-  - 변경 줄: 기준 커밋과 스캔한 커밋 사이의 diff(비교 API 또는 커밋 diff). 정확한 API는 구현 첫 단계에서 대상 Gitea로 확인한다.
-  - 스캔한 커밋은 소스의 `HEAD`다. `fetch-config`는 이를 알 수 없으므로 `--commit` 인자로 받는다(파이프라인의 `$(tasks.code-fetch.results.commit)`).
-  - API로도 구하지 못하면 신규 코드 지표는 측정 안 됨(기존 규칙).
+- 신규 코드 변경 줄: `--src`의 git 이력이 신규 코드 기간을 덮으면 `scan`이 기존처럼 git으로 계산한다. 얕은 클론에 대비해 `fetch-config`는 `--commit`이 주어지면 신규 코드 범위를 직접 계산해 `newcode.json`(기준 커밋, HEAD 커밋, 파일별 변경 줄)을 쓴다.
+  - Gitea 1.26.4에는 두 커밋 사이 diff를 한 번에 주는 API가 없다(`docs/verification-gitea.md`). 그래서 git을 쓴다: `/work/history`에 대상 저장소를 `git clone --bare --single-branch --branch <branch> --shallow-since=<기준 시각 - 1일>`로 받고, 기준 커밋(`git rev-list -1 --before=<기준 시각> <commit>`)과 `<commit>` 사이 `git diff -U0`를 기존 `parse_diff`로 해석한다.
+  - git은 `.git-credentials`(credential store helper)와 `GITEA_TOKEN`(HTTP 헤더)으로 인증하고, `QUALGATE_CA_FILE`(`http.sslCAInfo`), `QUALGATE_SSL_VERIFY=false`(`http.sslVerify=false`)를 따른다. 자격 증명은 명령줄 인자에 넣지 않는다.
+  - 받은 이력에 `<commit>`이 없거나 기준 커밋을 찾지 못하면 `newcode.json`을 쓰지 않고 경고만 한다(신규 코드 측정 안 됨).
 
 ### 5.2 `scan`
 
@@ -339,4 +338,4 @@ spec:
 
 1. 대상 Gitea(1.26.4)의 파일 API로 설정 파일 읽기, 이슈·라벨 API 동작.
 2. 클러스터 연결 후: `tekton-catalog`에 Task 등록, `ssl-ca-directory`·`gitconfig` workspace 형식(`.git-credentials` 파일 이름과 줄 형식) 확인.
-3. 대상 Gitea에서 신규 코드 변경 줄을 구할 API(커밋 목록 `until`, 비교·diff API)가 동작하는지(5.1).
+3. Tekton Pod에서 대상 Gitea로 git clone(HTTPS, 자격 증명, CA)이 되는지(5.1). 범위 diff API는 1.26.4에 없음을 확인했다.

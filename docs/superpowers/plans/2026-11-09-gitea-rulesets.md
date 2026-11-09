@@ -394,8 +394,10 @@ pub fn agent() -> anyhow::Result<ureq::Agent>;
 impl Client { pub fn new(base: &str, repo: &str, auth: Auth, agent: ureq::Agent) -> Client }
 pub fn get_file(&mut self, repo: &str, path: &str, git_ref: &str) -> Result<Option<(Vec<u8>, String /*sha*/)>>;  // 404 -> None
 pub fn latest_commit(&mut self, repo: &str, git_ref: &str) -> Result<String>;
-pub fn commit_before(&mut self, repo: &str, branch: &str, until_rfc3339: &str) -> Result<Option<String>>;
-pub fn diff(&mut self, repo: &str, base: &str, head: &str) -> Result<String>;   // unified diff, Task 1 결과의 경로 사용
+// 범위 diff API는 1.26.4에 없다(Task 1). 이력은 Task 8에서 git으로 받는다.
+pub fn git_env(auth: &Auth, gitea_url: &str, workdir: &Path) -> anyhow::Result<Vec<(String, String)>>;
+// git 하위 프로세스용 환경: GIT_CONFIG_COUNT/KEY/VALUE로 http.sslCAInfo, http.sslVerify, credential.helper(store --file=<임시 파일, 0600>) 또는
+// http.extraHeader=Authorization: token ... 를 넘긴다. 자격 증명은 인자에 넣지 않는다. GIT_TERMINAL_PROMPT=0.
 ```
 
 기존 `IssueApi` 구현과 호출부(`main.rs`)는 새 생성자로 바꾼다. 오류 메시지·Debug 출력에 자격 증명이 나오지 않아야 한다.
@@ -414,7 +416,7 @@ pub fn diff(&mut self, repo: &str, base: &str, head: &str) -> Result<String>;   
 - [ ] **Step 2~4: 실패 확인, 구현, 통과**
 
 Run: `bash scripts/cargo.sh test --lib httpcfg` 와 `--lib gitea`
-`gitea.rs`의 새 함수는 로컬 Gitea 통합 테스트(Task 11)에서 검증한다. 여기서는 URL 조립과 응답 파싱을 순수 함수로 분리해 단위 테스트한다(파일 API의 base64 디코딩, 404 → None).
+`git_env` 테스트: Basic이면 credential store 파일이 0600으로 생기고 내용이 `https://user:pass@host` 한 줄, Token이면 extraHeader 키가 들어감, CA·SSL 설정이 반영됨, 반환값을 Debug로 출력해도 비밀번호가 보이지 않음(값 타입을 가리는 래퍼 사용). `gitea.rs`의 새 함수는 로컬 Gitea 통합 테스트(Task 11)에서 검증한다. 여기서는 URL 조립과 응답 파싱을 순수 함수로 분리해 단위 테스트한다(파일 API의 base64 디코딩, 404 → None).
 
 - [ ] **Step 5: 커밋**
 
@@ -431,7 +433,7 @@ git commit -m "feat(gitea): CA file, optional TLS skip, git-credentials auth and
 - Modify: `src/main.rs`, `src/newcode.rs`, `tests/cli.rs`
 
 **Interfaces:**
-- Consumes: `httpcfg::{resolve_auth, agent}`, `gitea::Client::{get_file, latest_commit, commit_before, diff}`, `settings::resolve`, `Catalog::load`, `newcode::parse_diff`
+- Consumes: `httpcfg::{resolve_auth, agent, git_env}`, `gitea::Client::{get_file, latest_commit}`, `settings::resolve`, `Catalog::load`, `newcode::parse_diff`
 - Produces: CLI `qualgate fetch-config --repo <o/r> --branch <b> [--commit <sha>] --config-repo <o/r> [--ref main] --out <dir>`. 출력: `qualgate.toml`, `rulesets/<name>.toml`, `projects/<o>/<r>.toml`(등록된 경우), `source.json`(`{"config_repo","ref","config_commit","repo","branch","registered"}`), `newcode.json`(`--commit`이 있고 기준 커밋을 찾은 경우).
 
 ```rust
@@ -453,7 +455,9 @@ pub struct FetchRequest { pub repo: String, pub branch: String, pub commit: Opti
 6. 히스토리 API 오류는 경고만 하고 `newcode.json` 없이 성공(신규 코드는 측정 안 됨이 됨).
 7. `out`이 비어 있지 않으면 오류.
 
-- [ ] **Step 2~4: 실패 확인, 구현(`Client`에 두 트레이트 구현), 통과**
+- [ ] **Step 2~4: 실패 확인, 구현, 통과**
+
+`ConfigSource`는 `gitea::Client`로 구현한다. `HistorySource`는 `GitHistory`로 구현한다: `/work/history`(= `--out`의 형제 디렉터리가 아니라 `--history-dir`, 기본 `<out>/../history`)에 `git clone --bare --single-branch --branch <branch> --shallow-since=<기준 시각 - 1일> <GITEA_URL>/<repo>.git`, `commit_before` = `git rev-list -1 --before=<시각> <commit>`, `diff` = `git diff -U0 --no-color --no-ext-diff --find-renames --src-prefix=a/ --dst-prefix=b/ -c core.quotepath=false <base> <commit>`(기존 newcode의 옵션과 같게). 클론 실패는 경고 후 `newcode.json` 없음. `GitHistory`의 실제 동작은 Task 11에서 로컬 Gitea로 검증한다.
 
 Run: `bash scripts/cargo.sh test --lib fetch`
 
