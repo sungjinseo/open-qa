@@ -171,7 +171,11 @@ fn list(dir: &Path, rel: &str, errs: &mut Errs) -> Vec<(String, bool)> {
             err(errs, rel, "UTF-8이 아닌 파일 이름");
             continue;
         };
+        // 점으로 시작하는 항목(.gitkeep 등)과 .md 파일(README)은 설정이 아니므로 무시한다.
+        // 링크는 이름과 관계없이 거부한다.
         match e.file_type() {
+            Ok(t) if t.is_dir() && name.starts_with('.') => {}
+            Ok(t) if t.is_file() && (name.starts_with('.') || name.ends_with(".md")) => {}
             Ok(t) if t.is_dir() => v.push((name, true)),
             Ok(t) if t.is_file() => v.push((name, false)),
             _ => err(errs, &format!("{rel}/{name}"), "일반 파일 또는 디렉터리여야 합니다 (심볼릭 링크 불가)"),
@@ -577,11 +581,24 @@ mod tests {
         let d = good_copy();
         put(d.path(), "projects/stray.toml", "schema = 1\n");
         put(d.path(), "projects/team-a/notes.txt", "x");
-        put(d.path(), "rulesets/readme.md", "x");
+        put(d.path(), "rulesets/notes.txt", "x");
         let e = errors(d.path());
         assert!(has(&e, "projects/stray.toml", "예상하지 못한"), "{e:?}");
         assert!(has(&e, "projects/team-a/notes.txt", "예상하지 못한"), "{e:?}");
-        assert!(has(&e, "rulesets/readme.md", "예상하지 못한"), "{e:?}");
+        assert!(has(&e, "rulesets/notes.txt", "예상하지 못한"), "{e:?}");
+    }
+
+    #[test]
+    fn readme_and_dotfiles_are_ignored() {
+        let d = good_copy();
+        for rel in [
+            "rulesets/README.md", "rulesets/.gitkeep", "projects/README.md", "projects/.gitkeep",
+            "projects/team-a/README.md", "projects/team-a/.gitkeep", "projects/docs-only/README.md",
+            "projects/docs-only/.gitkeep", "projects/.hidden/x.toml",
+        ] {
+            put(d.path(), rel, "x");
+        }
+        load_dir_all(d.path(), &catalog()).unwrap();
     }
 
     #[cfg(unix)]
@@ -598,6 +615,11 @@ mod tests {
         let d = good_copy();
         symlink(outside.path().join("o"), d.path().join("projects/linked-owner")).unwrap();
         assert!(has(&errors(d.path()), "projects/linked-owner", "심볼릭"));
+
+        let d = good_copy();
+        put(outside.path(), ".dot", "x");
+        symlink(outside.path().join(".dot"), d.path().join("rulesets/.link")).unwrap();
+        assert!(has(&errors(d.path()), "rulesets/.link", "심볼릭"));
 
         let d = good_copy();
         std::fs::remove_file(d.path().join("qualgate.toml")).unwrap();
