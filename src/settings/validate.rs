@@ -205,7 +205,13 @@ fn project_repos(dir: &Path, errs: &mut Errs) -> Vec<String> {
         }
         for (n, is_dir) in list(dir, &format!("projects/{o}"), errs) {
             match n.strip_suffix(".toml") {
-                Some(r) if !is_dir => v.push(format!("{o}/{r}")),
+                Some(r) if !is_dir => {
+                    let repo = format!("{o}/{r}");
+                    // `resolve`가 거부하는 이름은 여기서도 거부한다(스캔 때에야 알게 되지 않도록).
+                    if valid_repo(&repo) { v.push(repo) } else {
+                        err(errs, &format!("projects/{o}/{n}"), format!("저장소 이름은 owner/repo 형식이어야 합니다: {repo}"));
+                    }
+                }
                 _ => err(errs, &format!("projects/{o}/{n}"), "예상하지 못한 항목 (<repo>.toml 파일이어야 합니다)"),
             }
         }
@@ -542,6 +548,17 @@ mod tests {
         put(d.path(), "rulesets/x.toml", &format!("{X_OK}[overrides.\"java.system-out\"]\nseverity = \"blocker\"\n"));
         assert!(has(&errors(d.path()), "rulesets/x.toml", "형식 오류"));
         put(d.path(), "rulesets/x.toml", &format!("{X_OK}[overrides.\"java.system-out\"]\nseverity = \"critical\"\nkind = \"hotspot\"\n"));
+        load_dir_all(d.path(), &catalog()).unwrap();
+    }
+
+    #[test]
+    fn project_names_must_pass_the_same_check_as_resolve() {
+        let d = good_copy();
+        for bad in ["projects/o/bad name.toml", "projects/o w/r.toml", "projects/o/a\u{e9}.toml"] {
+            put(d.path(), bad, "schema = 1\nruleset = \"x\"\n");
+            assert!(has(&errors(d.path()), bad, "owner/repo"), "{bad}");
+            std::fs::remove_file(d.path().join(bad)).unwrap();
+        }
         load_dir_all(d.path(), &catalog()).unwrap();
     }
 
