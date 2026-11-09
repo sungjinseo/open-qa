@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use qualgate::gitea::{Client, IssueApi};
-use qualgate::model::ScanResult;
+use qualgate::model::{ConditionStatus, ScanResult, SCHEMA};
 use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
@@ -37,6 +37,9 @@ fn do_scan(src: &Path, out: &Path) -> Result<ScanResult> {
     std::fs::create_dir_all(out)?;
     std::fs::write(&file, serde_json::to_vec_pretty(&r)?).context("결과 파일 쓰기 실패")?;
     println!("위반 {}건, 중복 그룹 {}개, 게이트 {}", r.findings.len(), r.clones.len(), if r.gate.passed { "통과" } else { "실패" });
+    if r.gate.conditions.iter().all(|c| c.status == ConditionStatus::Skipped) {
+        println!("경고: 게이트 조건을 하나도 측정하지 못해 모두 건너뛰었습니다. 이 통과는 품질을 판정한 결과가 아닙니다.");
+    }
     Ok(r)
 }
 
@@ -56,7 +59,9 @@ fn do_publish(r: &ScanResult, repo: &str) -> Result<()> {
 
 fn load_result(out: &Path) -> Result<ScanResult> {
     let t = std::fs::read_to_string(out.join("result.json")).context("result.json이 없습니다. scan이 성공했는지 확인하세요")?;
-    serde_json::from_str(&t).context("result.json 형식 오류")
+    let v: serde_json::Value = serde_json::from_str(&t).context("result.json 형식 오류")?;
+    if v["schema"] != SCHEMA { anyhow::bail!("result.json 스키마 {}을(를) 지원하지 않습니다 (지원: {SCHEMA})", v["schema"]); }
+    serde_json::from_value(v).context("result.json 형식 오류")
 }
 
 fn run(cli: Cli) -> Result<ScanResult> {

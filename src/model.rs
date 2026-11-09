@@ -2,6 +2,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
+/// `result.json` 형식 버전. `publish`는 다른 버전을 거부한다.
+pub const SCHEMA: u32 = 1;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity { Info, Low, Medium, High, Critical }
@@ -24,7 +27,8 @@ pub enum Lang { Java, Kotlin, Python, Js, Ts, Tsx, Go, Vue }
 
 impl Lang {
     pub fn of(path: &str) -> Option<Lang> {
-        let ext = path.rsplit('.').next()?.to_ascii_lowercase();
+        // 확장자 없는 파일(`go`, `py`)은 코드가 아니다.
+        let ext = path.rsplit('/').next()?.rsplit_once('.')?.1.to_ascii_lowercase();
         Some(match ext.as_str() {
             "java" => Lang::Java,
             "kt" | "kts" => Lang::Kotlin,
@@ -141,6 +145,8 @@ mod tests {
         assert_eq!(Lang::of("a/B.vue").unwrap().dup_group(), "web");
         assert_eq!(Lang::of("a/B.KT"), Some(Lang::Kotlin));
         assert_eq!(Lang::of("a/README.md"), None);
+        assert_eq!(Lang::of("bin/go"), None);
+        assert_eq!(Lang::of("a.b/py"), None);
     }
 
     #[test]

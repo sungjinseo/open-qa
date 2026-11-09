@@ -9,22 +9,24 @@ pub fn scan(src: &Path, rules_root: &Path, opengrep: &str) -> Result<ScanResult>
     let (commit, branch) = newcode::head_info(src)?;
     let exclude = fsutil::globset(&cfg.scan.exclude)?;
     let tests = fsutil::globset(&cfg.scan.test_paths)?;
-    let all = fsutil::walk(src);
-    let code: Vec<String> = all.iter().filter(|p| Lang::of(p).is_some() && !exclude.is_match(p.as_str())).cloned().collect();
+    let all = fsutil::walk(src)?;
+    let (code, excluded): (Vec<String>, Vec<String>) = all.iter().filter(|p| Lang::of(p).is_some()).cloned()
+        .partition(|p| !exclude.is_match(p.as_str()));
     let prod: Vec<String> = code.iter().filter(|p| !tests.is_match(p.as_str())).cloned().collect();
 
     let mut rule_paths = vec![rules_root.to_path_buf()];
-    rule_paths.extend(cfg.rules.extra_paths.iter().map(|p| src.join(p)));
+    rule_paths.extend(rules::extra_rule_paths(src, &cfg.rules.extra_paths)?);
     let outcome = rules::run(&rules::RunOpts {
         opengrep: opengrep.to_string(),
         src: src.to_path_buf(),
         rule_paths,
         exclude: cfg.scan.exclude.clone(),
         disabled: cfg.rules.disabled.clone(),
+        code: code.clone(),
     })?;
 
     let d = dup::detect(src, &prod, &cfg.duplication);
-    let loaded = coverage::load(src, &code, &cfg.coverage);
+    let loaded = coverage::load(src, &all, &code, &excluded, &tests, &cfg.coverage);
     for e in &loaded.errors { eprintln!("경고: 커버리지 리포트를 읽지 못했습니다: {e}"); }
 
     let changed = match newcode::changed(src, cfg.new_code.days) {
@@ -39,7 +41,7 @@ pub fn scan(src: &Path, rules_root: &Path, opengrep: &str) -> Result<ScanResult>
         new_duplication: changed.as_ref().and_then(|c| gate::duplication(&d.clones, &d.total_lines, Some(c))),
         new_blocking: gate::blocking_on_changed(&outcome.findings, changed.as_ref(), &cfg.gate.blocking_severities),
     };
-    let required_missing = cfg.coverage.required && !has_cov;
+    let required_missing = cfg.coverage.required && loaded.map.is_empty();
     let gate_result = gate::evaluate(&cfg.gate, &metrics, required_missing);
 
     let not_in_report: Vec<String> = if has_cov {
@@ -51,7 +53,7 @@ pub fn scan(src: &Path, rules_root: &Path, opengrep: &str) -> Result<ScanResult>
     unanalyzed.dedup();
 
     Ok(ScanResult {
-        schema: 1, commit, branch,
+        schema: SCHEMA, commit, branch,
         findings: outcome.findings,
         clones: d.clones,
         metrics,

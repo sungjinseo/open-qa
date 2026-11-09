@@ -21,11 +21,12 @@
 
 use crate::config::DupCfg;
 use crate::model::{CloneGroup, ClonePart, Lang};
+use crate::vue::Sfc;
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
-use tree_sitter::{Language, Node, Parser};
+use tree_sitter::{Language, Node, Parser, Tree};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TokenLine { pub line: u32, pub hash: u64, pub tokens: u32 }
@@ -54,30 +55,40 @@ fn skip_node(n: &Node) -> bool {
     k.contains("comment") || (n.child_count() > 0 && (k.contains("import") || k.contains("package")))
 }
 
-fn collect<'a>(n: Node<'a>, src: &[u8], out: &mut BTreeMap<u32, (u64, u32)>) {
-    if skip_node(&n) { return; }
-    if n.child_count() == 0 {
-        if n.end_byte() == n.start_byte() { return; }
-        let line = n.start_position().row as u32 + 1;
-        let e = out.entry(line).or_insert((0xcbf29ce484222325, 0));
-        for b in &src[n.start_byte()..n.end_byte()] {
-            e.0 ^= *b as u64;
-            e.0 = e.0.wrapping_mul(0x100000001b3);
-        }
-        e.0 ^= 0xff;
+fn add_token(n: &Node, src: &[u8], out: &mut BTreeMap<u32, (u64, u32)>) {
+    if n.end_byte() == n.start_byte() { return; }
+    let line = n.start_position().row as u32 + 1;
+    let e = out.entry(line).or_insert((0xcbf29ce484222325, 0));
+    for b in &src[n.start_byte()..n.end_byte()] {
+        e.0 ^= *b as u64;
         e.0 = e.0.wrapping_mul(0x100000001b3);
-        e.1 += 1;
-        return;
     }
-    let mut c = n.walk();
-    for child in n.children(&mut c) { collect(child, src, out); }
+    e.0 ^= 0xff;
+    e.0 = e.0.wrapping_mul(0x100000001b3);
+    e.1 += 1;
+}
+
+/// 재귀하면 아주 깊은 구문 트리에서 스택이 넘치므로 커서로 순회한다.
+fn collect(tree: &Tree, src: &[u8], out: &mut BTreeMap<u32, (u64, u32)>) {
+    let mut cur = tree.walk();
+    loop {
+        let n = cur.node();
+        let skip = skip_node(&n);
+        if !skip && n.child_count() == 0 { add_token(&n, src, out); }
+        if !skip && cur.goto_first_child() { continue; }
+        while !cur.goto_next_sibling() {
+            if !cur.goto_parent() { return; }
+        }
+    }
 }
 
 pub fn tokenize(lang: Lang, src: &str) -> Option<Vec<TokenLine>> {
     let (text, grammar) = if lang == Lang::Vue {
-        let e = crate::vue::extract(src)?;
-        let g = if e.ext == "ts" { Lang::Ts } else { Lang::Js };
-        (e.text, g)
+        match crate::vue::extract(src) {
+            Sfc::Script(e) => { let g = if e.ext == "ts" { Lang::Ts } else { Lang::Js }; (e.text, g) }
+            Sfc::NoScript => return Some(vec![]),
+            Sfc::Malformed => return None,
+        }
     } else {
         (src.to_string(), lang)
     };
@@ -85,7 +96,7 @@ pub fn tokenize(lang: Lang, src: &str) -> Option<Vec<TokenLine>> {
     p.set_language(&language(grammar)).ok()?;
     let tree = p.parse(&text, None)?;
     let mut m = BTreeMap::new();
-    collect(tree.root_node(), text.as_bytes(), &mut m);
+    collect(&tree, text.as_bytes(), &mut m);
     Some(m.into_iter().map(|(line, (hash, tokens))| TokenLine { line, hash, tokens }).collect())
 }
 
@@ -167,7 +178,6 @@ pub fn detect(root: &Path, files: &[String], cfg: &DupCfg) -> DupOutcome {
         let Ok(text) = std::fs::read_to_string(root.join(rel)) else { return Some(R::Bad(rel.clone())); };
         match tokenize(lang, &text) {
             Some(t) => Some(R::Ok(rel.clone(), lang, text.lines().count() as u32, t)),
-            None if lang == Lang::Vue => Some(R::Ok(rel.clone(), lang, text.lines().count() as u32, vec![])),
             None => Some(R::Bad(rel.clone())),
         }
     }).collect();
@@ -291,5 +301,23 @@ mod tests {
         std::fs::write(d.path().join("A.java"), [0xff, 0xfe, 0x00]).unwrap();
         let o = detect(d.path(), &["A.java".to_string(), "missing.go".to_string()], &cfg());
         assert_eq!(o.unanalyzed, vec!["A.java".to_string(), "missing.go".to_string()]);
+    }
+
+    #[test]
+    fn deep_expression_does_not_overflow_the_stack() {
+        let src = format!("const x = 1{};\n", " + 1".repeat(150_000));
+        let t = tokenize(Lang::Js, &src).unwrap();
+        assert_eq!(t.len(), 1);
+        assert!(t[0].tokens > 300_000);
+    }
+
+    #[test]
+    fn malformed_vue_is_unanalyzed_but_no_script_is_not() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("Bad.vue"), "<template>\n<script>\nx()\n</script>\n").unwrap();
+        std::fs::write(d.path().join("Plain.vue"), "<template><p/></template>\n").unwrap();
+        let o = detect(d.path(), &["Bad.vue".to_string(), "Plain.vue".to_string()], &cfg());
+        assert_eq!(o.unanalyzed, vec!["Bad.vue".to_string()]);
+        assert!(o.total_lines.contains_key("Plain.vue"));
     }
 }

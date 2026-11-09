@@ -6,7 +6,7 @@ use std::process::Command;
 pub type ChangedLines = BTreeMap<String, BTreeSet<u32>>;
 
 fn git(src: &Path, args: &[&str]) -> Result<String> {
-    let o = Command::new("git").args(["-c", "safe.directory=*", "-C"]).arg(src).args(args).output().context("git 실행 실패")?;
+    let o = Command::new("git").env_remove("GITEA_TOKEN").args(["-c", "safe.directory=*", "-C"]).arg(src).args(args).output().context("git 실행 실패")?;
     if !o.status.success() { bail!("git {args:?}: {}", String::from_utf8_lossy(&o.stderr)); }
     Ok(String::from_utf8_lossy(&o.stdout).into_owned())
 }
@@ -40,7 +40,7 @@ pub fn changed(src: &Path, days: u32) -> Result<Option<ChangedLines>> {
     let base = git(src, &["rev-list", "-1", &before, "HEAD"])?;
     let base = base.trim();
     if base.is_empty() { return Ok(None); }
-    let diff = git(src, &["-c", "core.quotepath=false", "diff", "-U0", "--no-color", "--no-ext-diff", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/", base, "HEAD"])?;
+    let diff = git(src, &["-c", "core.quotepath=false", "diff", "-U0", "--no-color", "--no-ext-diff", "--find-renames", "--src-prefix=a/", "--dst-prefix=b/", base, "HEAD"])?;
     // git still quotes paths with control characters, quotes or backslashes. Those hunks
     // cannot be mapped to a file name, so report unmeasured rather than undercount.
     if diff.lines().any(|l| l.starts_with("+++ \"")) { return Ok(None); }
@@ -128,6 +128,45 @@ mod tests {
     fn quoted_path_is_unmeasured() {
         let d = repo_with_changed_file("q\"x.txt");
         assert_eq!(changed(d.path(), 30).unwrap(), None);
+    }
+
+    fn commit_all(dir: &Path, date: &str) {
+        for args in [vec!["add", "-A"], vec!["commit", "-qm", "x"]] {
+            let st = Command::new("git").current_dir(dir).args(&args)
+                .env("GIT_AUTHOR_DATE", date).env("GIT_COMMITTER_DATE", date).status().unwrap();
+            assert!(st.success());
+        }
+    }
+
+    #[test]
+    fn moved_directory_is_not_new_code() {
+        let d = tempfile::tempdir().unwrap();
+        Command::new("git").current_dir(d.path()).args(["init", "-qb", "main"]).status().unwrap();
+        // 저장소 설정이 이름 변경 감지를 꺼도 이동한 코드가 신규로 잡히면 안 된다.
+        Command::new("git").current_dir(d.path()).args(["config", "diff.renames", "false"]).status().unwrap();
+        std::fs::create_dir_all(d.path().join("old")).unwrap();
+        let body: String = (0..20).map(|i| format!("line {i}\n")).collect();
+        std::fs::write(d.path().join("old/a.py"), &body).unwrap();
+        std::fs::write(d.path().join("old/b.py"), format!("{body}tail\n")).unwrap();
+        commit_all(d.path(), "2000-01-01T00:00:00");
+        std::fs::rename(d.path().join("old"), d.path().join("new")).unwrap();
+        commit_all(d.path(), "2099-01-01T00:00:00");
+        assert_eq!(changed(d.path(), 30).unwrap().unwrap(), ChangedLines::new());
+    }
+
+    #[test]
+    fn renamed_and_edited_file_keys_on_new_path() {
+        let d = tempfile::tempdir().unwrap();
+        Command::new("git").current_dir(d.path()).args(["init", "-qb", "main"]).status().unwrap();
+        let body: String = (0..20).map(|i| format!("line {i}\n")).collect();
+        std::fs::write(d.path().join("a.py"), &body).unwrap();
+        commit_all(d.path(), "2000-01-01T00:00:00");
+        std::fs::remove_file(d.path().join("a.py")).unwrap();
+        std::fs::write(d.path().join("b.py"), format!("{body}added\n")).unwrap();
+        commit_all(d.path(), "2099-01-01T00:00:00");
+        let c = changed(d.path(), 30).unwrap().unwrap();
+        assert_eq!(c["b.py"].iter().copied().collect::<Vec<_>>(), vec![21]);
+        assert_eq!(c.len(), 1);
     }
 
     #[test]

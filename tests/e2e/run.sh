@@ -31,4 +31,21 @@ print(lang, "OK" if not errs else "FAIL " + "; ".join(errs),
 sys.exit(1 if errs else 0)
 PY
 done
+
+# 읽을 수 없는 디렉터리는 조용히 건너뛰지 않고 실행 오류(2)여야 하고, 읽을 수 없는 파일은 분석 실패로
+# 남아야 한다. 컨테이너 안에서 비root 사용자로 만들어야 권한이 실제로 적용된다.
+docker run --rm --network none --entrypoint sh qualgate:dev -c '
+set -u
+mk() { rm -rf /tmp/r; mkdir -p /tmp/r/priv && cd /tmp/r && git init -qb main
+  printf "eval(input())
+" > a.py; printf "eval(input())
+" > priv/p.py
+  git add -A && git -c user.email=t@e -c user.name=t commit -qm init; }
+mk; chmod 700 priv; chmod 000 priv
+qualgate scan --src /tmp/r --out /tmp/o1 >/dev/null 2>/tmp/err; code=$?
+[ "$code" -eq 2 ] && echo "unreadable-dir OK exit=2 ($(head -c 120 /tmp/err))" || { echo "FAIL unreadable-dir exit=$code"; exit 1; }
+mk; chmod 000 priv/p.py
+qualgate scan --src /tmp/r --out /tmp/o2 >/dev/null 2>&1; code=$?
+grep -q "\"priv/p.py\"" /tmp/o2/result.json && [ "$code" -le 1 ] && echo "unreadable-file OK unanalyzed" || { echo "FAIL unreadable-file exit=$code"; cat /tmp/o2/result.json; exit 1; }
+' || fail=1
 exit "$fail"

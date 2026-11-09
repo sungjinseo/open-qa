@@ -1,19 +1,19 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use globset::{Glob, GlobBuilder, GlobSet, GlobSetBuilder};
 use std::path::Path;
 use walkdir::WalkDir;
 
 /// root 아래 파일을 `/` 구분 상대 경로로 정렬해 반환한다. `.git`은 제외한다.
-pub fn walk(root: &Path) -> Vec<String> {
-    let mut out: Vec<String> = WalkDir::new(root)
-        .into_iter()
-        .filter_entry(|e| e.file_name() != ".git")
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
-        .filter_map(|e| e.path().strip_prefix(root).ok().map(|p| p.to_string_lossy().replace('\\', "/")))
-        .collect();
+/// 읽지 못한 디렉터리를 건너뛰면 그 안의 이슈가 "고쳐짐"으로 보이므로 탐색 오류는 치명적이다.
+pub fn walk(root: &Path) -> Result<Vec<String>> {
+    let mut out = vec![];
+    for e in WalkDir::new(root).into_iter().filter_entry(|e| e.file_name() != ".git") {
+        let e = e.context("파일 탐색 실패")?;
+        if !e.file_type().is_file() { continue; }
+        if let Ok(p) = e.path().strip_prefix(root) { out.push(p.to_string_lossy().replace('\\', "/")); }
+    }
     out.sort();
-    out
+    Ok(out)
 }
 
 pub fn globset(patterns: &[String]) -> Result<GlobSet> {
@@ -36,7 +36,13 @@ mod tests {
         std::fs::create_dir_all(d.path().join("a")).unwrap();
         std::fs::write(d.path().join(".git/x"), "").unwrap();
         std::fs::write(d.path().join("a/b.go"), "").unwrap();
-        assert_eq!(walk(d.path()), vec!["a/b.go"]);
+        assert_eq!(walk(d.path()).unwrap(), vec!["a/b.go"]);
+    }
+
+    #[test]
+    fn walk_error_is_returned() {
+        let d = tempfile::tempdir().unwrap();
+        assert!(walk(&d.path().join("missing")).is_err());
     }
 
     #[test]

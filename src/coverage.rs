@@ -1,6 +1,7 @@
 use crate::config::CoverageCfg;
 use crate::model::{CoverageMap, LineCov};
 use anyhow::{Context, Result};
+use globset::GlobSet;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
 use std::collections::BTreeMap;
@@ -32,9 +33,11 @@ pub fn parse_jacoco(xml: &str) -> Result<RawCov> {
     let mut r = Reader::from_str(xml);
     let mut out = RawCov::new();
     let (mut pkg, mut file) = (String::new(), None::<String>);
+    let mut saw_root = false;
     loop {
         match r.read_event().context("JaCoCo XML 오류")? {
             Event::Start(e) | Event::Empty(e) => match e.name().as_ref().as_bytes() {
+                b"report" => saw_root = true,
                 b"package" => pkg = attr(&e, b"name").unwrap_or_default(),
                 b"sourcefile" => {
                     let n = attr(&e, b"name").unwrap_or_default();
@@ -53,6 +56,7 @@ pub fn parse_jacoco(xml: &str) -> Result<RawCov> {
             _ => {}
         }
     }
+    anyhow::ensure!(saw_root, "JaCoCo 루트 요소 없음");
     Ok(out)
 }
 
@@ -146,22 +150,31 @@ pub fn parse_go(text: &str) -> Result<RawCov> {
     Ok(out)
 }
 
+/// 한쪽 경로 전체가 다른 쪽의 접미사일 때 일치한 구성 요소 수. 아니면 0.
+/// 파일 이름만 같은 다른 파일(`a/util.py`와 `b/util.py`)에 커버리지가 붙지 않게 한다.
+fn match_len(report_path: &str, file: &str) -> usize {
+    let rp: Vec<&str> = report_path.split('/').filter(|s| !s.is_empty()).collect();
+    let fp: Vec<&str> = file.split('/').collect();
+    let n = fp.iter().rev().zip(rp.iter().rev()).take_while(|(a, b)| a == b).count();
+    if n == rp.len().min(fp.len()) { n } else { 0 }
+}
+
+fn best_len(report_path: &str, files: &[String]) -> usize {
+    files.iter().map(|f| match_len(report_path, f)).max().unwrap_or(0)
+}
+
 /// 리포트 경로와 저장소 경로를 뒤에서부터 비교해 가장 길게 일치하는 파일을 고른다.
 pub fn resolve(report_path: &str, files: &[String]) -> Option<String> {
-    let rp: Vec<&str> = report_path.split('/').filter(|s| !s.is_empty()).collect();
-    let mut best = 0usize;
-    let mut found: Vec<&String> = vec![];
-    for f in files {
-        let n = f.split('/').rev().zip(rp.iter().rev()).take_while(|(a, b)| a == *b).count();
-        if n == 0 { continue; }
-        if n > best { best = n; found = vec![f]; } else if n == best { found.push(f); }
-    }
+    let best = best_len(report_path, files);
+    if best == 0 { return None; }
+    let found: Vec<&String> = files.iter().filter(|f| match_len(report_path, f) == best).collect();
     if found.len() == 1 { Some(found[0].clone()) } else { None }
 }
 
-pub fn load(src: &Path, files: &[String], cfg: &CoverageCfg) -> Loaded {
+/// `code`는 분석 대상, `excluded`는 `exclude`에 걸린 소스 파일이다. 리포트 경로가 제외된 파일에 더
+/// 길게 일치하면 그 파일의 기록이므로 버린다. 테스트 파일의 기록도 지표에 넣지 않는다.
+pub fn load(src: &Path, all: &[String], code: &[String], excluded: &[String], tests: &GlobSet, cfg: &CoverageCfg) -> Loaded {
     let mut out = Loaded::default();
-    let all = crate::fsutil::walk(src);
     let kinds: [(&Vec<String>, fn(&str) -> Result<RawCov>); 4] = [
         (&cfg.jacoco, parse_jacoco), (&cfg.cobertura, parse_cobertura),
         (&cfg.lcov, parse_lcov), (&cfg.go, parse_go),
@@ -175,8 +188,10 @@ pub fn load(src: &Path, files: &[String], cfg: &CoverageCfg) -> Loaded {
                 Ok(raw) => {
                     out.reports.push(rel.clone());
                     for (path, lines) in raw {
-                        match resolve(&path, files) {
+                        if best_len(&path, excluded) > best_len(&path, code) { continue; }
+                        match resolve(&path, code) {
                             None => out.unresolved.push(path),
+                            Some(f) if tests.is_match(f.as_str()) => {}
                             Some(f) => {
                                 let dst = out.map.entry(f).or_default();
                                 for (n, c) in lines { merge_line(dst, n, c); }
@@ -245,13 +260,57 @@ mod tests {
     }
 
     #[test]
+    fn empty_xml_is_an_error_not_an_empty_report() {
+        assert!(parse_jacoco("").is_err());
+        assert!(parse_jacoco("<?xml version=\"1.0\"?><other/>").is_err());
+        assert!(parse_jacoco("<report name=\"x\"/>").unwrap().is_empty());
+    }
+
+    #[test]
+    fn one_matching_component_is_not_enough() {
+        let files = vec!["a/util.py".to_string()];
+        assert_eq!(resolve("b/util.py", &files), None);
+        assert_eq!(resolve("/ci/work/a/util.py", &files).as_deref(), Some("a/util.py"));
+        assert_eq!(resolve("util.py", &files).as_deref(), Some("a/util.py"));
+        let files = vec!["src/x/a.py".to_string()];
+        assert_eq!(resolve("build/x/a.py", &files), None);
+    }
+
+    fn load_in(d: &Path, code: &[String], excluded: &[String], tests: &[&str]) -> Loaded {
+        let all = crate::fsutil::walk(d).unwrap();
+        let tests = crate::fsutil::globset(&tests.iter().map(|s| s.to_string()).collect::<Vec<_>>()).unwrap();
+        load(d, &all, code, excluded, &tests, &CoverageCfg::default())
+    }
+
+    #[test]
+    fn test_files_are_left_out_and_not_unresolved() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(d.path().join("coverage")).unwrap();
+        std::fs::write(d.path().join("coverage/lcov.info"), "SF:src/a.test.ts\nDA:1,1\nend_of_record\nSF:src/a.ts\nDA:1,0\nend_of_record\n").unwrap();
+        let code = vec!["src/a.test.ts".to_string(), "src/a.ts".to_string()];
+        let l = load_in(d.path(), &code, &[], &["**/*.test.*"]);
+        assert_eq!(l.map.keys().collect::<Vec<_>>(), vec!["src/a.ts"]);
+        assert_eq!(l.unresolved, Vec::<String>::new());
+    }
+
+    #[test]
+    fn excluded_files_do_not_absorb_coverage() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(d.path().join("coverage")).unwrap();
+        std::fs::write(d.path().join("coverage/lcov.info"), "SF:vendor/x/a.js\nDA:1,1\nend_of_record\nSF:a.js\nDA:1,0\nend_of_record\n").unwrap();
+        let l = load_in(d.path(), &["a.js".to_string()], &["vendor/x/a.js".to_string()], &[]);
+        assert!(!l.map["a.js"][&1].covered);
+        assert_eq!(l.unresolved, Vec::<String>::new());
+    }
+
+    #[test]
     fn load_merges_finds_reports_and_records_errors() {
         let d = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(d.path().join("coverage")).unwrap();
         std::fs::write(d.path().join("coverage/lcov.info"), LCOV).unwrap();
         std::fs::write(d.path().join("coverage.xml"), "<not closed").unwrap();
         let files = vec!["src/App.tsx".to_string()];
-        let l = load(d.path(), &files, &CoverageCfg::default());
+        let l = load_in(d.path(), &files, &[], &[]);
         assert_eq!(l.reports, vec!["coverage/lcov.info".to_string()]);
         assert_eq!(l.errors, vec!["coverage.xml".to_string()]);
         assert!(l.map.contains_key("src/App.tsx"));
@@ -262,7 +321,7 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(d.path().join("coverage")).unwrap();
         std::fs::write(d.path().join("coverage/lcov.info"), LCOV).unwrap();
-        let l = load(d.path(), &[], &CoverageCfg::default());
+        let l = load_in(d.path(), &[], &[], &[]);
         assert_eq!(l.unresolved, vec!["src/App.tsx".to_string()]);
     }
 }
