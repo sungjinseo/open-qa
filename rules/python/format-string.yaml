@@ -1,0 +1,29 @@
+rules:
+  - id: python.format-string
+    languages: [python]
+    severity: WARNING
+    message: "[행안부 IV-17 포맷 스트링 삽입] 요청 값을 str.format()의 서식 문자열로 씁니다. {user.__class__} 같은 필드 접근으로 객체 속성과 비밀값이 노출됩니다. 서식 문자열은 고정 리터럴로 두고 값은 인자로 넘기세요."
+    mode: taint
+    pattern-sources:
+      - pattern: request.args
+      - pattern: request.form
+      - pattern: request.values
+      - pattern: request.json
+      - pattern: request.get_json(...)
+      - pattern: request.cookies
+      - pattern: request.headers
+      - pattern: request.GET
+      - pattern: request.POST
+      - pattern: request.data
+      - pattern: request.body
+
+    pattern-sinks:
+      - patterns:
+          - pattern: $T.format(...)
+          - focus-metavariable: $T
+    metadata:
+      qualgate_id: python.format-string
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: IV-17
+      cwe: "CWE-134"

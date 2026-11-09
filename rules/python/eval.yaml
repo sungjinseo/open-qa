@@ -2,10 +2,13 @@ rules:
   - id: python.eval
     languages: [python]
     severity: ERROR
-    message: "eval은 문자열을 코드로 실행해 임의 코드 실행 위험이 있습니다. ast.literal_eval이나 명시적 파서를 사용하세요."
-    pattern: |
-      eval(...)
+    message: "[행안부 IV-02 코드 삽입] eval()은 문자열을 파이썬 코드로 실행합니다. 외부 값이 섞이면 서버에서 임의 코드가 실행됩니다. ast.literal_eval이나 명시적인 분기로 대체하세요."
+    patterns:
+      - pattern: eval($X, ...)
+      - pattern-not: eval("...", ...)
     metadata:
       qualgate_id: python.eval
-      qualgate_severity: critical
+      qualgate_severity: high
       qualgate_category: security
+      qualgate_mois: IV-02
+      cwe: "CWE-95"

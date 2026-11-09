@@ -1,0 +1,18 @@
+rules:
+  - id: python.dns-based-decision
+    languages: [python]
+    severity: INFO
+    message: "[행안부 AM-01 DNS lookup에 의존한 보안결정] 역방향 DNS 조회 결과(호스트 이름)로 접근 허용 여부를 판단합니다. DNS 응답은 위조될 수 있어 신뢰 근거가 될 수 없습니다. IP 주소 자체나 인증서·토큰으로 판단하세요."
+    pattern-either:
+      - pattern: |
+          if <... socket.gethostbyaddr(...) ...>:
+              ...
+      - pattern: |
+          if <... socket.getfqdn(...) ...>:
+              ...
+    metadata:
+      qualgate_id: python.dns-based-decision
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: AM-01
+      cwe: "CWE-350"

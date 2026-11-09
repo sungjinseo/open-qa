@@ -1,0 +1,17 @@
+rules:
+  - id: python.insecure-random
+    languages: [python]
+    severity: WARNING
+    message: "[행안부 SF-08 적절하지 않은 난수 값 사용] random 모듈은 예측 가능한 난수입니다. 토큰·인증번호·비밀번호를 만들면 값이 추측됩니다. secrets 모듈(secrets.token_urlsafe 등)을 쓰세요."
+    patterns:
+      - pattern-either:
+          - pattern: $V = <... random.$F(...) ...>
+      - metavariable-regex:
+          metavariable: $V
+          regex: (?i).*(token|secret|password|passwd|otp|nonce|session|api_?key|code|salt|reset).*
+    metadata:
+      qualgate_id: python.insecure-random
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: SF-08
+      cwe: "CWE-338"

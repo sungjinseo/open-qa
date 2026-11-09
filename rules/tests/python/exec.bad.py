@@ -1,2 +1,2 @@
-def run(code):
-    exec(code)
+def run(snippet):
+    exec(snippet)

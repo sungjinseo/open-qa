@@ -1,0 +1,15 @@
+rules:
+  - id: python.none-deref-regex
+    languages: [python]
+    severity: INFO
+    message: "[행안부 CE-01 Null Pointer 역참조] re.match·re.search는 일치하지 않으면 None을 돌려주는데 바로 .group()을 호출합니다. 입력이 형식과 다르면 AttributeError로 서비스가 실패합니다. 결과가 None인지 먼저 확인하세요."
+    pattern-either:
+      - pattern: re.match(...).$M(...)
+      - pattern: re.search(...).$M(...)
+      - pattern: re.fullmatch(...).$M(...)
+    metadata:
+      qualgate_id: python.none-deref-regex
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: CE-01
+      cwe: "CWE-476"

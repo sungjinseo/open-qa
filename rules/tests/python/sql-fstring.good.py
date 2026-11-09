@@ -1,3 +1,3 @@
-def find(cur, user_id):
-    cur.execute("select * from users where id = %s", (user_id,))
-    return cur.fetchall()
+def find_user(cursor, name):
+    cursor.execute("SELECT * FROM users WHERE name = %s", (name,))
+    return cursor.fetchall()

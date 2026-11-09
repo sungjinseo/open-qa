@@ -1,0 +1,12 @@
+rules:
+  - id: python.django-debug
+    languages: [python]
+    severity: WARNING
+    message: "[행안부 EN-02 제거되지 않고 남은 디버그 코드] Django 설정에 DEBUG = True가 있습니다. 오류 시 설정값·SQL·환경 변수가 담긴 상세 화면이 사용자에게 노출됩니다. 운영 설정에서는 DEBUG = False로 두세요."
+    pattern: DEBUG = True
+    metadata:
+      qualgate_id: python.django-debug
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: EN-02
+      cwe: "CWE-489"

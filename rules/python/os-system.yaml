@@ -2,10 +2,16 @@ rules:
   - id: python.os-system
     languages: [python]
     severity: ERROR
-    message: "os.system은 셸을 거쳐 실행되어 명령 인젝션 위험이 있습니다. subprocess.run에 인자 리스트를 전달하세요."
-    pattern: |
-      os.system(...)
+    message: "[행안부 IV-05 운영체제 명령어 삽입] os.system()은 문자열을 셸로 실행합니다. 외부 값이 섞이면 ; 나 && 로 임의 명령이 실행됩니다. subprocess.run([...])에 인자 목록으로 넘기고 shell=True는 쓰지 마세요."
+    patterns:
+      - pattern-either:
+          - pattern: os.system($X)
+          - pattern: os.popen($X)
+      - pattern-not: os.system("...")
+      - pattern-not: os.popen("...")
     metadata:
       qualgate_id: python.os-system
-      qualgate_severity: high
+      qualgate_severity: critical
       qualgate_category: security
+      qualgate_mois: IV-05
+      cwe: "CWE-78"

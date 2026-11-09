@@ -1,0 +1,20 @@
+rules:
+  - id: python.open-without-with
+    languages: [python]
+    severity: INFO
+    message: "[행안부 CE-02 부적절한 자원 해제] 파일을 with 문 없이 열었고 같은 함수에서 닫지도 않습니다. 예외가 나면 파일 핸들이 누수되어 서비스가 멈출 수 있습니다. with open(...) as f: 형태로 열어 자동으로 닫으세요."
+    patterns:
+      - pattern: $V = open(...)
+      - pattern-not-inside: |
+          $V = open(...)
+          ...
+          $V.close()
+      - pattern-not-inside: |
+          with ...:
+              ...
+    metadata:
+      qualgate_id: python.open-without-with
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: CE-02
+      cwe: "CWE-404"

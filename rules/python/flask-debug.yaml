@@ -2,10 +2,13 @@ rules:
   - id: python.flask-debug
     languages: [python]
     severity: ERROR
-    message: "debug=True로 서버를 실행하면 원격 코드 실행이 가능한 디버거가 노출됩니다. 운영에서는 디버그를 끄세요."
-    pattern: |
-      $A.run(..., debug=True, ...)
+    message: "[행안부 EN-02 제거되지 않고 남은 디버그 코드] Flask를 debug=True로 실행합니다. 대화형 디버거(Werkzeug)가 열려 원격에서 코드가 실행될 수 있고 오류 화면에 내부 정보가 노출됩니다. 운영에서는 debug를 끄세요."
+    pattern-either:
+      - pattern: $A.run(..., debug=True, ...)
+      - pattern: $A.debug = True
     metadata:
       qualgate_id: python.flask-debug
       qualgate_severity: high
       qualgate_category: security
+      qualgate_mois: EN-02
+      cwe: "CWE-489"

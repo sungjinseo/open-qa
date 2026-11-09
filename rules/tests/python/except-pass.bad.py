@@ -1,5 +1,5 @@
-def parse(s):
+def load(path):
     try:
-        return int(s)
-    except ValueError:
+        return open(path).read()
+    except OSError:
         pass

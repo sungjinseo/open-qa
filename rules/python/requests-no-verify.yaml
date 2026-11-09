@@ -2,10 +2,14 @@ rules:
   - id: python.requests-no-verify
     languages: [python]
     severity: ERROR
-    message: "verify=False는 TLS 인증서 검증을 끄므로 중간자 공격에 노출됩니다. 검증을 켜고 필요하면 CA 번들을 지정하세요."
-    pattern: |
-      requests.$F(..., verify=False, ...)
+    message: "[행안부 SF-11 부적절한 인증서 유효성 검증] verify=False로 TLS 인증서 검증을 껐습니다. 중간자 공격으로 통신 내용이 노출·변조됩니다. 검증을 켜고 사설 CA라면 verify=\"ca.pem\"으로 지정하세요."
+    pattern-either:
+      - pattern: requests.$F(..., verify=False, ...)
+      - pattern: httpx.$F(..., verify=False, ...)
+      - pattern: $S.verify = False
     metadata:
       qualgate_id: python.requests-no-verify
       qualgate_severity: high
       qualgate_category: security
+      qualgate_mois: SF-11
+      cwe: "CWE-295"

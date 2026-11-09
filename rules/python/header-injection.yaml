@@ -1,0 +1,35 @@
+rules:
+  - id: python.header-injection
+    languages: [python]
+    severity: WARNING
+    message: "[행안부 IV-13 HTTP 응답분할] 요청 값을 응답 헤더에 그대로 넣습니다. CR/LF가 섞이면 응답이 쪼개져 헤더·본문이 위조됩니다. 줄바꿈 문자를 제거하거나 URL 인코딩하세요."
+    mode: taint
+    pattern-sources:
+      - pattern: request.args
+      - pattern: request.form
+      - pattern: request.values
+      - pattern: request.json
+      - pattern: request.get_json(...)
+      - pattern: request.cookies
+      - pattern: request.headers
+      - pattern: request.GET
+      - pattern: request.POST
+      - pattern: request.data
+      - pattern: request.body
+
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $R.headers[$K] = $V
+              - pattern: $R.headers.add($K, $V)
+              - pattern: $R.headers.set($K, $V)
+          - focus-metavariable: $V
+    pattern-sanitizers:
+      - pattern: quote(...)
+      - pattern: urllib.parse.quote(...)
+    metadata:
+      qualgate_id: python.header-injection
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: IV-13
+      cwe: "CWE-113"

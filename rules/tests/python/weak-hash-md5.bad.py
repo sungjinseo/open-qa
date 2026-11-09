@@ -1,4 +1,4 @@
 import hashlib
 
-def digest(data):
+def fingerprint(data):
     return hashlib.md5(data).hexdigest()

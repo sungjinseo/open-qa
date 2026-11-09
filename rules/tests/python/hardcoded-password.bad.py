@@ -1,4 +1,1 @@
-db_password = "hunter2"
-
-def connect():
-    return (db_password,)
+DB_PASSWORD = "P@ssw0rd-prod"

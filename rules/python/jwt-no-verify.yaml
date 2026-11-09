@@ -1,0 +1,15 @@
+rules:
+  - id: python.jwt-no-verify
+    languages: [python]
+    severity: ERROR
+    message: "[행안부 SF-10 부적절한 전자서명 확인] JWT 서명 검증을 끄거나 none 알고리즘을 허용합니다. 위조된 토큰이 그대로 통과합니다. 키와 algorithms=[\"HS256\"] 같은 고정 알고리즘을 지정해 검증하세요."
+    pattern-either:
+      - pattern: 'jwt.decode(..., options={..., "verify_signature": False, ...}, ...)'
+      - pattern: jwt.decode(..., verify=False, ...)
+      - pattern: jwt.decode(..., algorithms=[..., "none", ...], ...)
+    metadata:
+      qualgate_id: python.jwt-no-verify
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: SF-10
+      cwe: "CWE-347"

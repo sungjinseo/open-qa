@@ -2,10 +2,13 @@ rules:
   - id: python.exec
     languages: [python]
     severity: ERROR
-    message: "exec는 문자열을 코드로 실행해 임의 코드 실행 위험이 있습니다. 동적 실행을 제거하고 명시적 함수 호출로 바꾸세요."
-    pattern: |
-      exec(...)
+    message: "[행안부 IV-02 코드 삽입] exec()은 문자열을 파이썬 코드로 실행합니다. 외부 값이 섞이면 서버에서 임의 코드가 실행됩니다. 실행할 동작을 미리 정의한 함수 목록에서 고르는 방식으로 바꾸세요."
+    patterns:
+      - pattern: exec($X, ...)
+      - pattern-not: exec("...", ...)
     metadata:
       qualgate_id: python.exec
-      qualgate_severity: critical
+      qualgate_severity: high
       qualgate_category: security
+      qualgate_mois: IV-02
+      cwe: "CWE-95"

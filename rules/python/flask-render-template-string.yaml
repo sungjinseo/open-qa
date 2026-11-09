@@ -1,0 +1,14 @@
+rules:
+  - id: python.flask-render-template-string
+    languages: [python]
+    severity: ERROR
+    message: "[행안부 IV-02 코드 삽입] render_template_string에 변수로 만든 템플릿을 넘깁니다. 입력값이 템플릿 문법으로 해석되어 서버에서 코드가 실행됩니다(SSTI). 템플릿은 고정 문자열이나 파일로 두고 값은 컨텍스트 변수로 넘기세요."
+    patterns:
+      - pattern: render_template_string($T, ...)
+      - pattern-not: render_template_string("...", ...)
+    metadata:
+      qualgate_id: python.flask-render-template-string
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-02
+      cwe: "CWE-1336"

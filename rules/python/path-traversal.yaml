@@ -1,0 +1,37 @@
+rules:
+  - id: python.path-traversal
+    languages: [python]
+    severity: ERROR
+    message: "[행안부 IV-03 경로 조작 및 자원 삽입] 요청 값이 검증 없이 파일 경로로 쓰입니다. ../ 로 허용 디렉터리 밖의 파일을 읽거나 덮어쓸 수 있습니다. secure_filename()·os.path.basename()으로 파일 이름만 쓰고 결과 경로가 기준 디렉터리 안인지 확인하세요."
+    mode: taint
+    pattern-sources:
+      - pattern: request.args
+      - pattern: request.form
+      - pattern: request.values
+      - pattern: request.json
+      - pattern: request.get_json(...)
+      - pattern: request.cookies
+      - pattern: request.headers
+      - pattern: request.GET
+      - pattern: request.POST
+      - pattern: request.data
+      - pattern: request.body
+
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: open($P, ...)
+              - pattern: send_file($P, ...)
+              - pattern: send_from_directory($D, $P, ...)
+              - pattern: os.remove($P)
+              - pattern: Path($P)
+          - focus-metavariable: $P
+    pattern-sanitizers:
+      - pattern: secure_filename(...)
+      - pattern: os.path.basename(...)
+    metadata:
+      qualgate_id: python.path-traversal
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-03
+      cwe: "CWE-22"

@@ -1,3 +1,2 @@
-def find(cur, user_id):
-    cur.execute("select * from users where id = %s", (user_id,))
-    return cur.fetchall()
+def delete_user(cursor, uid):
+    cursor.execute("DELETE FROM users WHERE id = %s", (uid,))

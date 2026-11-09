@@ -1,0 +1,15 @@
+rules:
+  - id: python.drf-allow-any
+    languages: [python]
+    severity: WARNING
+    message: "[행안부 SF-01 적절한 인증 없는 중요 기능 허용] Django REST Framework 뷰에 AllowAny 권한을 지정했습니다. 로그인 없이 누구나 호출할 수 있습니다. 공개가 필요한 엔드포인트가 아니라면 IsAuthenticated 등 적절한 권한 클래스를 쓰세요."
+    pattern-either:
+      - pattern: permission_classes = [..., AllowAny, ...]
+      - pattern: permission_classes = [..., permissions.AllowAny, ...]
+      - pattern: permission_classes = (..., AllowAny, ...)
+    metadata:
+      qualgate_id: python.drf-allow-any
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: SF-01
+      cwe: "CWE-306"
