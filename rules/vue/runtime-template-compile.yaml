@@ -1,0 +1,22 @@
+rules:
+  - id: vue.runtime-template-compile
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "[행안부 IV-02 코드 삽입] 실행 시점에 문자열을 Vue 템플릿으로 컴파일합니다(Vue.compile, template 옵션). 입력값이 섞이면 템플릿 표현식으로 임의 스크립트가 실행됩니다. 템플릿은 빌드 시점에 고정하고 값은 데이터로 바인딩하세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    patterns:
+      - pattern-either:
+          - pattern: Vue.compile($X)
+          - pattern: compile($X)
+          - pattern: '{..., template: $X, ...}'
+      - pattern-not: Vue.compile("...")
+      - pattern-not: compile("...")
+      - pattern-not: '{..., template: "...", ...}'
+      - pattern-not: '{..., template: `...`, ...}'
+    metadata:
+      qualgate_id: vue.runtime-template-compile
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-02
+      cwe: "CWE-94"

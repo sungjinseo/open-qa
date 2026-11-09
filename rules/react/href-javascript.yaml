@@ -2,12 +2,11 @@ rules:
   - id: react.href-javascript
     languages: [javascript, typescript]
     severity: ERROR
-    message: "javascript: URL은 클릭 시 스크립트를 실행해 XSS 위험이 있습니다. onClick 핸들러나 실제 URL을 사용하세요."
+    message: "[행안부 IV-04 크로스사이트 스크립트] 링크의 href가 javascript: 주소입니다. 클릭하면 페이지 권한으로 스크립트가 실행되어 XSS 통로가 됩니다. 이벤트 핸들러(onClick)나 정상 URL을 쓰세요."
     paths:
       include: ["*.jsx", "*.tsx"]
     patterns:
-      - pattern: |
-          <a href=$H />
+      - pattern: <a href=$H />
       - metavariable-regex:
           metavariable: $H
           regex: '^["'']javascript:'
@@ -15,3 +14,5 @@ rules:
       qualgate_id: react.href-javascript
       qualgate_severity: high
       qualgate_category: security
+      qualgate_mois: IV-04
+      cwe: "CWE-79"

@@ -1,0 +1,16 @@
+rules:
+  - id: react.iframe-no-sandbox
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "[행안부 IV-04 크로스사이트 스크립트] <iframe>에 sandbox 속성이 없습니다. 외부 문서가 최상위 페이지를 이동시키거나 스크립트·폼·팝업을 제약 없이 쓸 수 있습니다. 필요한 권한만 허용하는 sandbox를 지정하세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    patterns:
+      - pattern: <iframe src=... />
+      - pattern-not: <iframe sandbox=... />
+    metadata:
+      qualgate_id: react.iframe-no-sandbox
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: IV-04
+      cwe: "CWE-1021"

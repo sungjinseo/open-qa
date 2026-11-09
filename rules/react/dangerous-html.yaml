@@ -1,13 +1,19 @@
+# Adapted from kr-secure-coding (MIT, (c) 2026 ace30126)
 rules:
   - id: react.dangerous-html
     languages: [javascript, typescript]
     severity: ERROR
-    message: "dangerouslySetInnerHTML은 검증되지 않은 HTML을 삽입해 XSS 위험이 있습니다. 텍스트로 렌더링하거나 DOMPurify로 정제하세요."
+    message: "[행안부 IV-04 크로스사이트 스크립트] dangerouslySetInnerHTML에 정화되지 않은 값을 넣습니다. 사용자 입력이 섞이면 다른 사용자의 브라우저에서 스크립트가 실행됩니다. 텍스트로 렌더링하거나 DOMPurify.sanitize()를 거친 값만 넣으세요. (Vue의 v-html은 템플릿이라 이 도구가 볼 수 없습니다.)"
     paths:
       include: ["*.jsx", "*.tsx"]
-    pattern: |
-      <$T dangerouslySetInnerHTML=... />
+    patterns:
+      - pattern: '<$EL dangerouslySetInnerHTML={{__html: $X}} />'
+      - pattern-not: '<$EL dangerouslySetInnerHTML={{__html: "..."}} />'
+      - pattern-not: '<$EL dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(...)}} />'
+      - pattern-not: '<$EL dangerouslySetInnerHTML={{__html: sanitize(...)}} />'
     metadata:
       qualgate_id: react.dangerous-html
       qualgate_severity: high
       qualgate_category: security
+      qualgate_mois: IV-04
+      cwe: "CWE-79"

@@ -1,0 +1,16 @@
+rules:
+  - id: vue.router-guard-always-next
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "[행안부 SF-01 적절한 인증 없는 중요 기능 허용] 전역 라우터 가드가 무조건 next()만 호출합니다. 로그인 여부나 권한을 확인하지 않아 보호가 필요한 화면이 그대로 열립니다(클라이언트 가드는 UI 보호일 뿐 API 인가는 서버가 해야 합니다). 인증 상태를 확인하고 미인증이면 로그인으로 보내세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    pattern-either:
+      - pattern: $R.beforeEach(($TO, $FROM, $N) => { $N(); })
+      - pattern: $R.beforeEach(function ($TO, $FROM, $N) { $N(); })
+    metadata:
+      qualgate_id: vue.router-guard-always-next
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: SF-01
+      cwe: "CWE-306"

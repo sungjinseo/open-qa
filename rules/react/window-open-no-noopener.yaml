@@ -1,0 +1,15 @@
+rules:
+  - id: react.window-open-no-noopener
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "[행안부 IV-07 신뢰되지 않은 URL주소로 자동접속 연결] window.open으로 새 탭을 열면서 noopener를 지정하지 않았습니다. 열린 페이지가 window.opener로 원래 탭을 조작할 수 있습니다. 세 번째 인자에 \"noopener,noreferrer\"를 지정하세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    patterns:
+      - pattern: window.open($U, "_blank")
+    metadata:
+      qualgate_id: react.window-open-no-noopener
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: IV-07
+      cwe: "CWE-1022"

@@ -1,0 +1,29 @@
+rules:
+  - id: react.deprecated-react-api
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "[행안부 AM-02 취약한 API 사용] 폐기된 React API를 씁니다(findDOMNode, ReactDOM.render, componentWillMount 등). 동시 렌더링에서 오작동하고 이후 버전에서 제거됩니다. ref, createRoot, useEffect 같은 대체 API를 쓰세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    pattern-either:
+      - pattern: ReactDOM.findDOMNode(...)
+      - pattern: ReactDOM.render(...)
+      - pattern: React.createFactory(...)
+      - pattern: |
+          class $C extends $B {
+            ...
+            componentWillMount() {...}
+            ...
+          }
+      - pattern: |
+          class $C extends $B {
+            ...
+            componentWillReceiveProps($P) {...}
+            ...
+          }
+    metadata:
+      qualgate_id: react.deprecated-react-api
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: AM-02
+      cwe: "CWE-477"

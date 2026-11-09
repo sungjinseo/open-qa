@@ -1,0 +1,14 @@
+rules:
+  - id: vue.insecure-baseurl
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "[행안부 SF-05 암호화되지 않은 중요정보] axios 인스턴스의 baseURL이 http:// 입니다. 모든 API 요청의 계정 정보와 데이터가 평문으로 전송됩니다. https:// 를 사용하세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    pattern-regex: baseURL:\s*["'`]http://(?!localhost|127\.0\.0\.1)
+    metadata:
+      qualgate_id: vue.insecure-baseurl
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: SF-05
+      cwe: "CWE-319"

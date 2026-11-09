@@ -1,0 +1,25 @@
+rules:
+  - id: react.hook-in-condition
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "조건문·반복문 안에서 Hook을 호출합니다. 렌더링마다 Hook 호출 순서가 달라져 상태가 뒤섞이거나 오류가 납니다. Hook은 컴포넌트 최상위에서만 호출하세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              if ($C) {
+                ...
+              }
+          - pattern-inside: |
+              for (...) {
+                ...
+              }
+      - pattern: $H(...)
+      - metavariable-regex:
+          metavariable: $H
+          regex: ^use[A-Z]\w*$
+    metadata:
+      qualgate_id: react.hook-in-condition
+      qualgate_severity: medium
+      qualgate_category: bug

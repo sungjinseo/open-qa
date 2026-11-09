@@ -1,0 +1,12 @@
+rules:
+  - id: react.use-effect-missing-deps
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "useEffect에 의존성 배열이 없어 렌더링할 때마다 실행됩니다. 상태를 바꾸는 효과라면 무한 렌더링이나 불필요한 네트워크 요청이 생깁니다. 의존성 배열을 지정하세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    pattern: useEffect($F)
+    metadata:
+      qualgate_id: react.use-effect-missing-deps
+      qualgate_severity: low
+      qualgate_category: bug

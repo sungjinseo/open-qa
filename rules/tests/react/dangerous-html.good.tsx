@@ -1,3 +1,5 @@
-export function Comment({ text }: { text: string }) {
-  return <div>{text}</div>;
+import DOMPurify from "dompurify";
+
+export function Comment({ html }: { html: string }) {
+  return <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }} />;
 }

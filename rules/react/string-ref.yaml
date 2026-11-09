@@ -1,0 +1,14 @@
+rules:
+  - id: react.string-ref
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "[행안부 AM-02 취약한 API 사용] 문자열 ref(ref=\"name\")는 폐기된 API로 이후 버전에서 제거됩니다. useRef나 콜백 ref를 사용하세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    pattern: <$T ref="..." />
+    metadata:
+      qualgate_id: react.string-ref
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: AM-02
+      cwe: "CWE-477"

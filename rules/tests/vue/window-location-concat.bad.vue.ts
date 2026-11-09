@@ -1,3 +1,3 @@
-export function go(next: string) {
-  window.location.href = "/login?next=" + next;
+export function go(target: string) {
+  window.location.href = "/redirect?to=" + target;
 }
