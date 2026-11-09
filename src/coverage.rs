@@ -22,7 +22,7 @@ pub struct Loaded {
 fn attr(e: &BytesStart, name: &[u8]) -> Option<String> {
     // `&amp;` 같은 엔티티를 풀어야 `A&B.java` 같은 파일 이름이 실제 경로와 맞는다.
     e.attributes().flatten().find(|a| a.key.as_ref().as_bytes() == name)
-        .and_then(|a| a.normalized_value(quick_xml::XmlVersion::Implicit1_0).ok().map(|v| v.into_owned()))
+        .map(|a| a.normalized_value(quick_xml::XmlVersion::Implicit1_0).map_or_else(|_| a.value.to_string(), |v| v.into_owned()))
 }
 
 fn merge_line(m: &mut BTreeMap<u32, LineCov>, line: u32, c: LineCov) {

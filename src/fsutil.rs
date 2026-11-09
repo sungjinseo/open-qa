@@ -15,8 +15,12 @@ pub fn walk(root: &Path, exclude: &GlobSet) -> Result<Vec<String>> {
         let e = match e {
             Ok(e) => e,
             Err(err) => {
-                let skip = err.path().and_then(rel).is_some_and(|r| dir_excluded(&r, exclude) || exclude.is_match(r.as_str()));
-                if skip { continue; }
+                let r = err.path().and_then(rel);
+                let is_dir = err.path().is_none_or(|p| std::fs::metadata(p).map(|m| m.is_dir()).unwrap_or(true));
+                if r.as_deref().is_some_and(|r| error_skippable(r, is_dir, exclude)) {
+                    eprintln!("경고: 제외된 경로를 읽지 못해 건너뜁니다 ({}): {err}. 이 아래의 커버리지 리포트는 읽지 않습니다.", r.unwrap_or_default());
+                    continue;
+                }
                 return Err(err).context("파일 탐색 실패");
             }
         };
@@ -27,12 +31,22 @@ pub fn walk(root: &Path, exclude: &GlobSet) -> Result<Vec<String>> {
     Ok(out)
 }
 
-/// 디렉터리 자체가 걸리거나, 그 아래 임의의 깊이(자식, 손자)가 모두 걸리면 true. `**/x/**`는 `x`
-/// 자체에는 걸리지 않으므로 자식 이름을 붙여 확인한다. `a/*`처럼 직계 자식만 걸리는 패턴은
-/// 손자 확인에서 떨어지므로 하위 디렉터리를 잘못 건너뛰지 않는다.
-pub fn dir_excluded(rel: &str, exclude: &GlobSet) -> bool {
-    exclude.is_match(rel)
-        || (exclude.is_match(format!("{rel}/x").as_str()) && exclude.is_match(format!("{rel}/x/y/z").as_str()))
+/// 탐색 오류를 무시해도 되는지. 디렉터리는 그 안의 모든 것이 제외될 때만(`contents_excluded`),
+/// 파일은 경로 자체가 걸릴 때만 무시한다. 디렉터리 경로 자체가 걸린다고 내용까지 제외된 것은
+/// 아니다(`a/*`, `**/build`는 `a/priv`에 걸리지만 `a/priv/p.py`에는 걸리지 않는다).
+pub fn error_skippable(rel: &str, is_dir: bool, exclude: &GlobSet) -> bool {
+    if is_dir { contents_excluded(rel, exclude) } else { exclude.is_match(rel) }
+}
+
+/// 디렉터리 아래 임의의 이름·깊이가 모두 `exclude`에 걸리면 true. 흔치 않은 이름의 자식과 손자를
+/// 여러 개 확인하므로 `**/x`와 `**/z`처럼 서로 다른 패턴 둘이 우연히 걸리는 경우에 속지 않는다.
+/// 디렉터리 자체의 일치(`is_match(rel)`)는 판단에 쓰지 않는다.
+pub fn contents_excluded(rel: &str, exclude: &GlobSet) -> bool {
+    const NAMES: [&str; 4] = ["qg-probe-a", "qg_probe.b", "Qg-Probe-3", "qg-probe-d.py"];
+    NAMES.iter().all(|n| {
+        exclude.is_match(format!("{rel}/{n}").as_str())
+            && exclude.is_match(format!("{rel}/{n}/{}/{}", NAMES[1], NAMES[2]).as_str())
+    })
 }
 
 pub fn globset(patterns: &[String]) -> Result<GlobSet> {
@@ -65,23 +79,32 @@ mod tests {
     }
 
     #[test]
-    fn excluded_dir_predicate_and_excluded_files_still_listed() {
-        let g = globset(&["**/pgdata/**".into(), "vendor/**".into(), "docs/*.py".into()]).unwrap();
-        assert!(dir_excluded("pgdata", &g));
-        assert!(dir_excluded("a/b/pgdata", &g));
-        assert!(dir_excluded("vendor", &g));
-        assert!(dir_excluded("vendor/x", &g));
-        assert!(!dir_excluded("src", &g));
-        assert!(!dir_excluded("docs", &g));
-        let direct = globset(&["a/*".into()]).unwrap();
-        assert!(!dir_excluded("a", &direct));
+    fn error_skip_needs_contents_excluded_not_just_the_dir_path() {
+        let g = |p: &[&str]| globset(&p.iter().map(|s| s.to_string()).collect::<Vec<_>>()).unwrap();
+        assert!(error_skippable("build", true, &g(&["**/build/**"])));
+        assert!(error_skippable("a/b/pgdata", true, &g(&["**/pgdata/**"])));
+        assert!(error_skippable("vendor", true, &g(&["vendor/**"])));
+        // 디렉터리 경로만 걸리는 패턴이면 내용은 제외된 것이 아니므로 오류가 치명적이다.
+        assert!(!error_skippable("a/priv", true, &g(&["a/*"])));
+        assert!(!error_skippable("a/priv", true, &g(&["**/priv"])));
+        assert!(!error_skippable("a/build", true, &g(&["**/build"])));
+        // 서로 무관한 패턴 둘이 우연히 걸려도 속지 않는다.
+        assert!(!error_skippable("d", true, &g(&["**/x", "**/z"])));
+        assert!(!error_skippable("d", true, &g(&["**/{x,z}"])));
+        assert!(!error_skippable("src", true, &g(&["docs/*.py"])));
+        // 파일은 경로 자체가 걸리면 된다.
+        assert!(error_skippable("a/f.py", false, &g(&["a/*"])));
+        assert!(!error_skippable("a/f.py", false, &g(&["b/*"])));
+    }
+
+    #[test]
+    fn readable_excluded_files_are_still_listed() {
+        let g = globset(&["**/pgdata/**".into()]).unwrap();
         let d = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(d.path().join("a/pgdata")).unwrap();
-        std::fs::create_dir_all(d.path().join("a/ok")).unwrap();
         std::fs::write(d.path().join("a/pgdata/f"), "").unwrap();
-        std::fs::write(d.path().join("a/ok/f.go"), "").unwrap();
-        // 읽을 수 있는 제외 디렉터리는 그대로 나열된다(커버리지 리포트 탐색용).
-        assert_eq!(walk(d.path(), &g).unwrap(), vec!["a/ok/f.go", "a/pgdata/f"]);
+        std::fs::write(d.path().join("a/f.go"), "").unwrap();
+        assert_eq!(walk(d.path(), &g).unwrap(), vec!["a/f.go", "a/pgdata/f"]);
     }
 
     #[test]
