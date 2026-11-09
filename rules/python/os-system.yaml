@@ -1,0 +1,11 @@
+rules:
+  - id: python.os-system
+    languages: [python]
+    severity: ERROR
+    message: "os.system은 셸을 거쳐 실행되어 명령 인젝션 위험이 있습니다. subprocess.run에 인자 리스트를 전달하세요."
+    pattern: |
+      os.system(...)
+    metadata:
+      qualgate_id: python.os-system
+      qualgate_severity: high
+      qualgate_category: security

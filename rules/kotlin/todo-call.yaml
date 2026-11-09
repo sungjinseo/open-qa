@@ -1,0 +1,11 @@
+rules:
+  - id: kotlin.todo-call
+    languages: [kotlin]
+    severity: WARNING
+    message: "TODO()는 호출 시 NotImplementedError를 던져 운영 중 장애가 됩니다. 구현하거나 명시적인 예외 처리로 바꾸세요."
+    pattern: |
+      TODO(...)
+    metadata:
+      qualgate_id: kotlin.todo-call
+      qualgate_severity: medium
+      qualgate_category: reliability

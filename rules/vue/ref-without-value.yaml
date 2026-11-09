@@ -1,0 +1,16 @@
+rules:
+  - id: vue.ref-without-value
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "ref 변수 자체에 값을 대입하면 반응성이 끊깁니다. .value에 대입하세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    patterns:
+      - pattern: |
+          $X = ref($V);
+          ...
+          $X = $W;
+    metadata:
+      qualgate_id: vue.ref-without-value
+      qualgate_severity: medium
+      qualgate_category: bug

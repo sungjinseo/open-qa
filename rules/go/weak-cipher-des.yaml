@@ -1,0 +1,11 @@
+rules:
+  - id: go.weak-cipher-des
+    languages: [go]
+    severity: ERROR
+    message: "DES는 키 길이가 짧아 쉽게 해독됩니다. AES-GCM 같은 현대적 알고리즘을 사용하세요."
+    pattern: |
+      des.NewCipher(...)
+    metadata:
+      qualgate_id: go.weak-cipher-des
+      qualgate_severity: high
+      qualgate_category: security

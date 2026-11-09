@@ -1,0 +1,11 @@
+rules:
+  - id: go.time-sleep
+    languages: [go]
+    severity: INFO
+    message: "time.Sleep은 고정 대기로 테스트를 느리고 불안정하게 만듭니다. 타이머, context 또는 채널 동기화를 사용하세요."
+    pattern: |
+      time.Sleep(...)
+    metadata:
+      qualgate_id: go.time-sleep
+      qualgate_severity: low
+      qualgate_category: maintainability

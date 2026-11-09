@@ -1,0 +1,13 @@
+rules:
+  - id: vue.inner-html
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "innerHTML에 값을 대입하면 XSS 위험이 있습니다. 템플릿 바인딩이나 textContent를 사용하세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    pattern: |
+      $E.innerHTML = $V
+    metadata:
+      qualgate_id: vue.inner-html
+      qualgate_severity: high
+      qualgate_category: security

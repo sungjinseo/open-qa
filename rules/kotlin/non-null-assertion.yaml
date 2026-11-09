@@ -1,0 +1,11 @@
+rules:
+  - id: kotlin.non-null-assertion
+    languages: [kotlin]
+    severity: WARNING
+    message: "!! 연산자는 null일 때 NullPointerException을 던집니다. 안전 호출(?.)이나 엘비스(?:)로 null을 처리하세요."
+    pattern: |
+      $X!!
+    metadata:
+      qualgate_id: kotlin.non-null-assertion
+      qualgate_severity: medium
+      qualgate_category: reliability

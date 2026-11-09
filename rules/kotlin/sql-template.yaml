@@ -1,0 +1,11 @@
+rules:
+  - id: kotlin.sql-template
+    languages: [kotlin]
+    severity: ERROR
+    message: "문자열 템플릿으로 SQL을 만들면 SQL 인젝션 위험이 있습니다. PreparedStatement의 파라미터 바인딩을 사용하세요."
+    patterns:
+      - pattern-regex: 'executeQuery\("[^"]*\$\{?\w+'
+    metadata:
+      qualgate_id: kotlin.sql-template
+      qualgate_severity: high
+      qualgate_category: security

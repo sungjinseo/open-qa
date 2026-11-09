@@ -1,0 +1,13 @@
+rules:
+  - id: vue.force-update
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "$forceUpdate는 반응형 설계가 잘못되었다는 신호이며 불필요한 렌더링을 만듭니다. 상태를 반응형 데이터로 관리하세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    pattern: |
+      this.$forceUpdate()
+    metadata:
+      qualgate_id: vue.force-update
+      qualgate_severity: medium
+      qualgate_category: maintainability

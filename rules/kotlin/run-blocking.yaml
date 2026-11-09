@@ -1,0 +1,11 @@
+rules:
+  - id: kotlin.run-blocking
+    languages: [kotlin]
+    severity: WARNING
+    message: "runBlocking은 현재 스레드를 막아 데드락과 지연을 일으킬 수 있습니다. suspend 함수나 적절한 스코프를 사용하세요."
+    pattern: |
+      runBlocking { ... }
+    metadata:
+      qualgate_id: kotlin.run-blocking
+      qualgate_severity: medium
+      qualgate_category: reliability

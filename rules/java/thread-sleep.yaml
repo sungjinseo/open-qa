@@ -1,0 +1,11 @@
+rules:
+  - id: java.thread-sleep
+    languages: [java]
+    severity: INFO
+    message: "Thread.sleep은 스레드를 막고 테스트를 느리게 하며 취약한 타이밍에 의존합니다. 스케줄러나 대기 조건을 사용하세요."
+    pattern: |
+      Thread.sleep(...)
+    metadata:
+      qualgate_id: java.thread-sleep
+      qualgate_severity: low
+      qualgate_category: maintainability

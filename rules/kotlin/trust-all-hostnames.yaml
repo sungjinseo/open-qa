@@ -1,0 +1,11 @@
+rules:
+  - id: kotlin.trust-all-hostnames
+    languages: [kotlin]
+    severity: ERROR
+    message: "호스트 이름 검증기를 교체하면 TLS 호스트 검증이 무력화되어 중간자 공격에 노출됩니다. 기본 검증기를 유지하세요."
+    pattern: |
+      HttpsURLConnection.setDefaultHostnameVerifier(...)
+    metadata:
+      qualgate_id: kotlin.trust-all-hostnames
+      qualgate_severity: critical
+      qualgate_category: security

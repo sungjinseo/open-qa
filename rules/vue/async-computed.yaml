@@ -1,0 +1,15 @@
+rules:
+  - id: vue.async-computed
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "computed에 async 함수를 넘기면 Promise가 값이 되어 반응형 결과를 얻지 못합니다. watch나 별도 async 로딩 상태를 사용하세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    patterns:
+      - pattern: |
+          computed(...)
+      - pattern-regex: 'computed\(\s*async\b'
+    metadata:
+      qualgate_id: vue.async-computed
+      qualgate_severity: high
+      qualgate_category: bug

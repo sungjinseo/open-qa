@@ -1,0 +1,11 @@
+rules:
+  - id: python.print-call
+    languages: [python]
+    severity: INFO
+    message: "print는 레벨과 형식을 제어할 수 없습니다. logging 모듈을 사용하세요."
+    pattern: |
+      print(...)
+    metadata:
+      qualgate_id: python.print-call
+      qualgate_severity: low
+      qualgate_category: maintainability

@@ -1,0 +1,11 @@
+rules:
+  - id: java.catch-throwable
+    languages: [java]
+    severity: WARNING
+    message: "Throwable을 잡으면 OutOfMemoryError 같은 복구 불가 오류까지 삼킵니다. 구체적인 예외 타입을 잡으세요."
+    pattern: |
+      try { ... } catch (Throwable $E) { ... }
+    metadata:
+      qualgate_id: java.catch-throwable
+      qualgate_severity: medium
+      qualgate_category: reliability

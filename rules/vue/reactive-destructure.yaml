@@ -1,0 +1,13 @@
+rules:
+  - id: vue.reactive-destructure
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "reactive 객체를 구조 분해하면 반응성을 잃습니다. toRefs로 변환한 뒤 구조 분해하세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    pattern: |
+      const { ... } = reactive(...)
+    metadata:
+      qualgate_id: vue.reactive-destructure
+      qualgate_severity: medium
+      qualgate_category: bug

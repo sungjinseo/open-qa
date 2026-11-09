@@ -1,0 +1,17 @@
+rules:
+  - id: react.set-state-in-render
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "렌더 중에 상태 setter를 호출하면 무한 리렌더링이 발생합니다. 이벤트 핸들러나 useEffect에서 호출하세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    patterns:
+      - pattern: |
+          function $C(...) { ... $S(...); return <$T ... />; }
+      - metavariable-regex:
+          metavariable: $S
+          regex: '^set[A-Z].*'
+    metadata:
+      qualgate_id: react.set-state-in-render
+      qualgate_severity: high
+      qualgate_category: bug

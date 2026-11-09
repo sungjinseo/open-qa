@@ -1,0 +1,14 @@
+rules:
+  - id: python.except-pass
+    languages: [python]
+    severity: WARNING
+    message: "예외를 pass로 무시하면 오류가 조용히 사라져 원인을 찾기 어렵습니다. 로깅하거나 처리하세요."
+    pattern: |
+      try:
+          ...
+      except $E:
+          pass
+    metadata:
+      qualgate_id: python.except-pass
+      qualgate_severity: medium
+      qualgate_category: reliability

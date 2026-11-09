@@ -1,0 +1,11 @@
+rules:
+  - id: java.cipher-ecb
+    languages: [java]
+    severity: ERROR
+    message: "ECB 모드는 같은 평문 블록이 같은 암호문이 되어 패턴이 노출됩니다. GCM 같은 인증 암호화 모드를 사용하세요."
+    pattern: |
+      Cipher.getInstance("AES/ECB/PKCS5Padding")
+    metadata:
+      qualgate_id: java.cipher-ecb
+      qualgate_severity: high
+      qualgate_category: security

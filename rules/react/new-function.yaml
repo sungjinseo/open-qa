@@ -1,0 +1,13 @@
+rules:
+  - id: react.new-function
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "new Function은 문자열을 코드로 실행해 임의 코드 실행 위험이 있습니다. 동적 코드 대신 명시적 함수를 사용하세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    pattern: |
+      new Function(...)
+    metadata:
+      qualgate_id: react.new-function
+      qualgate_severity: critical
+      qualgate_category: security

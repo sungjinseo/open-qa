@@ -1,0 +1,15 @@
+rules:
+  - id: react.use-effect-async
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "useEffect 콜백을 async로 만들면 Promise를 반환해 cleanup이 동작하지 않습니다. 내부에서 async 함수를 정의해 호출하세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    patterns:
+      - pattern: |
+          useEffect(...)
+      - pattern-regex: 'useEffect\(\s*async\b'
+    metadata:
+      qualgate_id: react.use-effect-async
+      qualgate_severity: medium
+      qualgate_category: bug

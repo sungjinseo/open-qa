@@ -1,0 +1,13 @@
+rules:
+  - id: vue.debugger
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "debugger 문이 남아 있으면 브라우저가 실행을 멈춥니다. 커밋 전에 제거하세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    pattern: |
+      debugger;
+    metadata:
+      qualgate_id: vue.debugger
+      qualgate_severity: medium
+      qualgate_category: maintainability

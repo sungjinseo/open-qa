@@ -1,0 +1,22 @@
+rules:
+  - id: go.defer-in-loop
+    languages: [go]
+    severity: ERROR
+    message: "반복문 안의 defer는 함수가 끝날 때까지 쌓여 자원이 늦게 해제됩니다. 별도 함수로 분리하거나 직접 Close하세요."
+    pattern-either:
+      - pattern: |
+          for $I := range $C {
+            ...
+            defer $F(...)
+            ...
+          }
+      - pattern: |
+          for ... {
+            ...
+            defer $F(...)
+            ...
+          }
+    metadata:
+      qualgate_id: go.defer-in-loop
+      qualgate_severity: high
+      qualgate_category: bug

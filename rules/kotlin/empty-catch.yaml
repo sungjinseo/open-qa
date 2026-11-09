@@ -1,0 +1,11 @@
+rules:
+  - id: kotlin.empty-catch
+    languages: [kotlin]
+    severity: WARNING
+    message: "빈 catch 블록은 예외를 조용히 삼켜 장애 원인을 숨깁니다. 로깅하거나 처리하거나 다시 던지세요."
+    pattern: |
+      try { ... } catch ($E: $T) { }
+    metadata:
+      qualgate_id: kotlin.empty-catch
+      qualgate_severity: medium
+      qualgate_category: reliability

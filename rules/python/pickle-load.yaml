@@ -1,0 +1,11 @@
+rules:
+  - id: python.pickle-load
+    languages: [python]
+    severity: ERROR
+    message: "신뢰할 수 없는 데이터를 pickle로 역직렬화하면 임의 코드 실행 위험이 있습니다. JSON 같은 안전한 형식을 사용하세요."
+    pattern: |
+      pickle.loads(...)
+    metadata:
+      qualgate_id: python.pickle-load
+      qualgate_severity: high
+      qualgate_category: security

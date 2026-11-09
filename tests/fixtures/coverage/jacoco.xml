@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">
+<report name="x"><package name="com/acme"><sourcefile name="A.java">
+<line nr="3" mi="0" ci="4" mb="0" cb="0"/>
+<line nr="4" mi="2" ci="0" mb="1" cb="1"/>
+</sourcefile></package></report>

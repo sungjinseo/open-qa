@@ -1,0 +1,11 @@
+rules:
+  - id: kotlin.thread-sleep
+    languages: [kotlin]
+    severity: INFO
+    message: "Thread.sleep은 스레드를 막고 테스트를 느리게 합니다. 코루틴 delay나 스케줄러를 사용하세요."
+    pattern: |
+      Thread.sleep(...)
+    metadata:
+      qualgate_id: kotlin.thread-sleep
+      qualgate_severity: low
+      qualgate_category: maintainability

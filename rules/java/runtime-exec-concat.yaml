@@ -1,0 +1,11 @@
+rules:
+  - id: java.runtime-exec-concat
+    languages: [java]
+    severity: ERROR
+    message: "외부 입력을 이어 붙여 명령을 실행하면 명령 인젝션 위험이 있습니다. 인자를 배열로 분리하고 입력을 검증하세요."
+    pattern: |
+      Runtime.getRuntime().exec("..." + $X)
+    metadata:
+      qualgate_id: java.runtime-exec-concat
+      qualgate_severity: critical
+      qualgate_category: security

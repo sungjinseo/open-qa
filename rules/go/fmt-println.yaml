@@ -1,0 +1,11 @@
+rules:
+  - id: go.fmt-println
+    languages: [go]
+    severity: INFO
+    message: "fmt.Println은 레벨과 형식을 제어할 수 없습니다. log나 slog 같은 로거를 사용하세요."
+    pattern: |
+      fmt.Println(...)
+    metadata:
+      qualgate_id: go.fmt-println
+      qualgate_severity: low
+      qualgate_category: maintainability

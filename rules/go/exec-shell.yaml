@@ -1,0 +1,11 @@
+rules:
+  - id: go.exec-shell
+    languages: [go]
+    severity: ERROR
+    message: "sh -c로 명령을 실행하면 입력이 셸에서 해석되어 명령 인젝션 위험이 있습니다. 실행 파일과 인자를 분리해 전달하세요."
+    pattern: |
+      exec.Command("sh", "-c", ...)
+    metadata:
+      qualgate_id: go.exec-shell
+      qualgate_severity: critical
+      qualgate_category: security

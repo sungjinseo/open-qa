@@ -1,0 +1,14 @@
+rules:
+  - id: python.bare-except
+    languages: [python]
+    severity: WARNING
+    message: "except만 쓰면 KeyboardInterrupt와 SystemExit까지 잡아 종료를 막습니다. 구체적인 예외 타입을 지정하세요."
+    pattern: |
+      try:
+          ...
+      except:
+          ...
+    metadata:
+      qualgate_id: python.bare-except
+      qualgate_severity: medium
+      qualgate_category: reliability

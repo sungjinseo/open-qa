@@ -1,0 +1,14 @@
+rules:
+  - id: java.sql-update-concat
+    languages: [java]
+    severity: ERROR
+    message: "SQL 변경문을 문자열 연결로 만들면 SQL 인젝션 위험이 있습니다. PreparedStatement의 파라미터 바인딩을 사용하세요."
+    patterns:
+      - pattern: |
+          $S.executeUpdate($A + $B)
+      - pattern-not: |
+          $S.executeUpdate("..." + "...")
+    metadata:
+      qualgate_id: java.sql-update-concat
+      qualgate_severity: high
+      qualgate_category: security

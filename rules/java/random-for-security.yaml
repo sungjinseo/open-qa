@@ -1,0 +1,11 @@
+rules:
+  - id: java.random-for-security
+    languages: [java]
+    severity: WARNING
+    message: "java.util.Random은 예측 가능해 토큰이나 비밀번호 생성에 부적합합니다. SecureRandom을 사용하세요."
+    pattern: |
+      new java.util.Random(...)
+    metadata:
+      qualgate_id: java.random-for-security
+      qualgate_severity: medium
+      qualgate_category: security

@@ -1,0 +1,11 @@
+rules:
+  - id: kotlin.print-stack-trace
+    languages: [kotlin]
+    severity: INFO
+    message: "printStackTrace는 표준 오류로만 출력되어 로그 체계에서 빠집니다. 로거로 예외를 기록하세요."
+    pattern: |
+      $E.printStackTrace()
+    metadata:
+      qualgate_id: kotlin.print-stack-trace
+      qualgate_severity: low
+      qualgate_category: maintainability

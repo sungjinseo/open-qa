@@ -1,0 +1,11 @@
+rules:
+  - id: go.sql-concat
+    languages: [go]
+    severity: ERROR
+    message: "문자열 연결로 SQL을 만들면 SQL 인젝션 위험이 있습니다. ?나 $1 같은 파라미터 바인딩을 사용하세요."
+    pattern: |
+      $DB.Query("..." + $X, ...)
+    metadata:
+      qualgate_id: go.sql-concat
+      qualgate_severity: high
+      qualgate_category: security

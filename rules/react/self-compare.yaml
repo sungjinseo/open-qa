@@ -1,0 +1,13 @@
+rules:
+  - id: react.self-compare
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "같은 식을 자기 자신과 비교하면 항상 같은 결과가 나오는 오타일 가능성이 큽니다. 비교 대상을 확인하세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    pattern: |
+      $X === $X
+    metadata:
+      qualgate_id: react.self-compare
+      qualgate_severity: high
+      qualgate_category: bug

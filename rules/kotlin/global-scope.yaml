@@ -1,0 +1,11 @@
+rules:
+  - id: kotlin.global-scope
+    languages: [kotlin]
+    severity: WARNING
+    message: "GlobalScope는 생명주기에 묶이지 않아 코루틴이 누수되고 취소되지 않습니다. 구조화된 CoroutineScope에서 launch하세요."
+    pattern: |
+      GlobalScope.launch { ... }
+    metadata:
+      qualgate_id: kotlin.global-scope
+      qualgate_severity: medium
+      qualgate_category: reliability

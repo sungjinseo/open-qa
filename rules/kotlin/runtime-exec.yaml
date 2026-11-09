@@ -1,0 +1,11 @@
+rules:
+  - id: kotlin.runtime-exec
+    languages: [kotlin]
+    severity: ERROR
+    message: "Runtime.exec는 문자열을 셸 규칙으로 쪼개 명령 인젝션 위험이 있습니다. ProcessBuilder에 인자를 분리해 전달하세요."
+    pattern: |
+      Runtime.getRuntime().exec(...)
+    metadata:
+      qualgate_id: kotlin.runtime-exec
+      qualgate_severity: critical
+      qualgate_category: security

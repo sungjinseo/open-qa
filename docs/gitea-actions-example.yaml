@@ -1,0 +1,33 @@
+name: qualgate
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 18 * * *"
+jobs:
+  qualgate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # 프로젝트의 테스트를 실행해 커버리지 리포트를 만드는 단계를 여기 둔다.
+      # 결과는 작업 공간 밖(runner 임시 폴더)에 쓴다. 저장소에 커밋된 result.json을 읽지 않게 한다.
+      - name: scan
+        id: scan
+        run: |
+          out="$RUNNER_TEMP/qualgate-out"; rm -rf "$out"; mkdir -p "$out" && chmod 777 "$out"
+          set +e
+          docker run --rm --network none -e QUALGATE_BRANCH="${{ github.ref_name }}"             -v "$PWD:/src:ro" -v "$out:/out" registry.example.com/qualgate:latest scan
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          # 0 통과, 1 게이트 실패(결과 있음), 2 실행 오류
+          [ "$code" -le 1 ]
+      # 게이트가 실패해도(1) 이슈는 갱신하고, 실행 오류(2)면 등록하지 않는다.
+      - name: publish
+        if: ${{ !cancelled() && (steps.scan.outputs.code == '0' || steps.scan.outputs.code == '1') }}
+        run: |
+          docker run --rm -v "$RUNNER_TEMP/qualgate-out:/out:ro"             -e GITEA_URL="${{ github.server_url }}" -e GITEA_TOKEN="${{ secrets.QUALGATE_TOKEN }}"             registry.example.com/qualgate:latest publish --repo "${{ github.repository }}"
+      - name: gate
+        if: ${{ steps.scan.outputs.code == '1' }}
+        run: exit 1

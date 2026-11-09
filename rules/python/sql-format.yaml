@@ -1,0 +1,11 @@
+rules:
+  - id: python.sql-format
+    languages: [python]
+    severity: ERROR
+    message: "str.format으로 SQL을 만들면 SQL 인젝션 위험이 있습니다. 쿼리 파라미터 바인딩을 사용하세요."
+    pattern: |
+      $C.execute("...".format(...))
+    metadata:
+      qualgate_id: python.sql-format
+      qualgate_severity: high
+      qualgate_category: security

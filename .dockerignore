@@ -1,0 +1,6 @@
+target
+.git
+.qualgate-out
+docs
+tests
+rules/tests

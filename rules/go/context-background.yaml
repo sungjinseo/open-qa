@@ -1,0 +1,11 @@
+rules:
+  - id: go.context-background
+    languages: [go]
+    severity: INFO
+    message: "context.Background()를 직접 쓰면 호출자의 취소와 타임아웃이 전파되지 않습니다. 호출자에게서 받은 ctx를 전달하세요."
+    pattern: |
+      context.Background()
+    metadata:
+      qualgate_id: go.context-background
+      qualgate_severity: low
+      qualgate_category: maintainability

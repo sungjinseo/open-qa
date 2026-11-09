@@ -1,0 +1,11 @@
+rules:
+  - id: python.assert-tuple
+    languages: [python]
+    severity: ERROR
+    message: "assert에 튜플을 넘기면 비어 있지 않아 항상 참이 되어 검사가 무력화됩니다. 괄호 없이 조건과 메시지를 쉼표로 구분하세요."
+    pattern: |
+      assert ($A, $B)
+    metadata:
+      qualgate_id: python.assert-tuple
+      qualgate_severity: high
+      qualgate_category: bug
