@@ -10,21 +10,21 @@ pub fn extract(src: &str) -> Sfc {
     match blocks(src) {
         None => Sfc::Malformed,
         Some((keep, _)) if keep.is_empty() => Sfc::NoScript,
-        Some((keep, ts)) => {
+        Some((keep, ext)) => {
             let mut text = String::with_capacity(src.len());
             for (i, ch) in src.char_indices() {
                 let inside = keep.iter().any(|(a, b)| i >= *a && i < *b);
                 if inside || ch == '\n' || ch == '\r' { text.push(ch); } else { text.push(' '); }
             }
-            Sfc::Script(Extracted { text, ext: if ts { "ts" } else { "js" } })
+            Sfc::Script(Extracted { text, ext })
         }
     }
 }
 
-/// 최상위의 script 본문 범위와 TS 여부. 구조가 깨졌으면 `None`.
-fn blocks(src: &str) -> Option<(Vec<(usize, usize)>, bool)> {
+/// 최상위의 script 본문 범위와 언어(`js`, `ts`, `tsx`). 구조가 깨졌으면 `None`.
+fn blocks(src: &str) -> Option<(Vec<(usize, usize)>, &'static str)> {
     let mut keep = vec![];
-    let mut ts = false;
+    let mut ext = "js";
     let mut pos = 0;
     while let Some(i) = src[pos..].find('<') {
         let at = pos + i;
@@ -39,7 +39,8 @@ fn blocks(src: &str) -> Option<(Vec<(usize, usize)>, bool)> {
             pos = end;
             if self_closing { continue; }
             let tag = &src[at..end];
-            if ["lang=\"ts\"", "lang='ts'", "lang=\"tsx\"", "lang='tsx'"].iter().any(|l| tag.contains(l)) { ts = true; }
+            if ["lang=\"tsx\"", "lang='tsx'"].iter().any(|l| tag.contains(l)) { ext = "tsx"; }
+            else if ext == "js" && ["lang=\"ts\"", "lang='ts'"].iter().any(|l| tag.contains(l)) { ext = "ts"; }
             let close = end + src[end..].find("</script")?;
             keep.push((end, close));
             pos = close + src[close..].find('>')? + 1;
@@ -47,7 +48,7 @@ fn blocks(src: &str) -> Option<(Vec<(usize, usize)>, bool)> {
             pos = at + 1;
         }
     }
-    Some((keep, ts))
+    Some((keep, ext))
 }
 
 fn is_tag(rest: &str, open: &str) -> bool {
@@ -124,6 +125,32 @@ mod tests {
         assert_eq!(e.ext, "ts");
         assert!(e.text.contains("const a: number = 1"));
         assert!(!e.text.contains("<script"));
+    }
+
+    #[test]
+    fn tsx_is_reported_distinctly() {
+        assert_eq!(script("<script lang=\"tsx\">
+const a = <p/>
+</script>
+").ext, "tsx");
+        assert_eq!(script("<script lang='tsx'>
+x
+</script>
+").ext, "tsx");
+        assert_eq!(script("<script lang=\"ts\">
+x
+</script>
+<script setup lang=\"tsx\">
+y
+</script>
+").ext, "tsx");
+        assert_eq!(script("<script lang=\"tsx\">
+x
+</script>
+<script setup lang=\"ts\">
+y
+</script>
+").ext, "tsx");
     }
 
     #[test]

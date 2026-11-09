@@ -28,7 +28,10 @@ pub enum Lang { Java, Kotlin, Python, Js, Ts, Tsx, Go, Vue }
 impl Lang {
     pub fn of(path: &str) -> Option<Lang> {
         // 확장자 없는 파일(`go`, `py`)은 코드가 아니다.
-        let ext = path.rsplit('/').next()?.rsplit_once('.')?.1.to_ascii_lowercase();
+        // 점으로 시작하는 이름(`.java`)도 확장자가 아니라 이름이므로 줄기가 비어 있으면 제외한다.
+        let (stem, ext) = path.rsplit('/').next()?.rsplit_once('.')?;
+        if stem.is_empty() { return None; }
+        let ext = ext.to_ascii_lowercase();
         Some(match ext.as_str() {
             "java" => Lang::Java,
             "kt" | "kts" => Lang::Kotlin,
@@ -147,6 +150,11 @@ mod tests {
         assert_eq!(Lang::of("a/README.md"), None);
         assert_eq!(Lang::of("bin/go"), None);
         assert_eq!(Lang::of("a.b/py"), None);
+        assert_eq!(Lang::of("java"), None);
+        assert_eq!(Lang::of("src/java"), None);
+        assert_eq!(Lang::of(".java"), None);
+        assert_eq!(Lang::of("a/.py"), None);
+        assert_eq!(Lang::of("a.b/C.java"), Some(Lang::Java));
     }
 
     #[test]

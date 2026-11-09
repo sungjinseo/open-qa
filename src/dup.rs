@@ -85,7 +85,7 @@ fn collect(tree: &Tree, src: &[u8], out: &mut BTreeMap<u32, (u64, u32)>) {
 pub fn tokenize(lang: Lang, src: &str) -> Option<Vec<TokenLine>> {
     let (text, grammar) = if lang == Lang::Vue {
         match crate::vue::extract(src) {
-            Sfc::Script(e) => { let g = if e.ext == "ts" { Lang::Ts } else { Lang::Js }; (e.text, g) }
+            Sfc::Script(e) => { let g = match e.ext { "tsx" => Lang::Tsx, "ts" => Lang::Ts, _ => Lang::Js }; (e.text, g) }
             Sfc::NoScript => return Some(vec![]),
             Sfc::Malformed => return None,
         }
@@ -232,6 +232,18 @@ mod tests {
             assert!(!t.is_empty(), "{l:?}");
             assert!(t.iter().all(|x| x.line > 1 || l == Lang::Python), "{l:?} {t:?}");
         }
+    }
+
+    #[test]
+    fn vue_tsx_script_uses_the_tsx_grammar() {
+        let code = "const x = <div a=\"1\">{b}</div>;\nconst y = <T,>(v: T) => v;\n";
+        let tsx = tokenize(Lang::Tsx, code).unwrap();
+        // 이 코드는 TS 문법으로 읽으면 결과가 달라야 테스트가 의미가 있다.
+        assert_ne!(tsx, tokenize(Lang::Ts, code).unwrap());
+        let sfc = format!("<script setup lang=\"tsx\">\n{code}</script>\n");
+        let got: Vec<_> = tokenize(Lang::Vue, &sfc).unwrap().into_iter().map(|t| (t.hash, t.tokens)).collect();
+        let want: Vec<_> = tsx.into_iter().map(|t| (t.hash, t.tokens)).collect();
+        assert_eq!(got, want);
     }
 
     #[test]
