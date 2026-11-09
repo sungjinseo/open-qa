@@ -49,8 +49,16 @@ fn every_rule_detects_bad_and_accepts_good() {
         }
         // 행안부 49 기본 규칙 묶음: 보안 규칙은 항목 ID와 메시지 접두어가 있어야 한다. (kotlin은 기존 규칙 유지)
         if lang != "kotlin" && yaml.contains("qualgate_category: security") {
-            if !yaml.contains("qualgate_mois:") { failures.push(format!("{lang}.{name}: qualgate_mois 없음")); }
-            if !yaml.contains("message: \"[행안부 ") { failures.push(format!("{lang}.{name}: 메시지가 [행안부 로 시작하지 않음")); }
+            let mois = yaml.lines().find_map(|l| l.trim().strip_prefix("qualgate_mois:")).map(|v| v.trim().to_string()).unwrap_or_default();
+            if mois.is_empty() { failures.push(format!("{lang}.{name}: qualgate_mois 없음 또는 비어 있음")); }
+            let has_cwe = yaml.lines().any(|l| l.trim().strip_prefix("cwe:").is_some_and(|v| v.trim().trim_matches('"').starts_with("CWE-")));
+            if !has_cwe { failures.push(format!("{lang}.{name}: cwe 메타데이터 없음")); }
+            // message: "[행안부 IV-01 ...]" 또는 "[행안부 확장 VC-01 ...]"의 항목 ID가 qualgate_mois와 같아야 한다.
+            let msg = yaml.lines().find_map(|l| l.trim().strip_prefix("message: \"[행안부 ")).unwrap_or("");
+            let msg = msg.strip_prefix("확장 ").unwrap_or(msg);
+            let id = msg.split(' ').next().unwrap_or("");
+            if msg.is_empty() { failures.push(format!("{lang}.{name}: 메시지가 [행안부 로 시작하지 않음")); }
+            else if id != mois { failures.push(format!("{lang}.{name}: 메시지 항목 ID({id})가 qualgate_mois({mois})와 다름")); }
         }
         if !bad.exists() || !good.exists() { failures.push(format!("{name}: 예제 없음")); continue; }
         let b = scan(&rule, &bad);
