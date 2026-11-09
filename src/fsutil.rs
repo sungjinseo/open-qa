@@ -35,6 +35,8 @@ pub fn walk(root: &Path, exclude: &GlobSet) -> Result<Vec<String>> {
 /// 파일은 경로 자체가 걸릴 때만 무시한다. 디렉터리 경로 자체가 걸린다고 내용까지 제외된 것은
 /// 아니다(`a/*`, `**/build`는 `a/priv`에 걸리지만 `a/priv/p.py`에는 걸리지 않는다).
 pub fn error_skippable(rel: &str, is_dir: bool, exclude: &GlobSet) -> bool {
+    // 상대 경로가 비면 탐색 루트 자체다. 루트를 읽지 못하면 무엇도 분석되지 않았으므로 건너뛰지 않는다.
+    if rel.is_empty() { return false; }
     if is_dir { contents_excluded(rel, exclude) } else { exclude.is_match(rel) }
 }
 
@@ -42,7 +44,7 @@ pub fn error_skippable(rel: &str, is_dir: bool, exclude: &GlobSet) -> bool {
 /// 여러 개 확인하므로 `**/x`와 `**/z`처럼 서로 다른 패턴 둘이 우연히 걸리는 경우에 속지 않는다.
 /// 디렉터리 자체의 일치(`is_match(rel)`)는 판단에 쓰지 않는다.
 pub fn contents_excluded(rel: &str, exclude: &GlobSet) -> bool {
-    const NAMES: [&str; 4] = ["qg-probe-a", "qg_probe.b", "Qg-Probe-3", "qg-probe-d.py"];
+    const NAMES: [&str; 6] = ["qg-probe-a", "qg_probe.b", "Qg-Probe-3", "qg-probe-d.py", "0qg-probe", ".qg-probe"];
     NAMES.iter().all(|n| {
         exclude.is_match(format!("{rel}/{n}").as_str())
             && exclude.is_match(format!("{rel}/{n}/{}/{}", NAMES[1], NAMES[2]).as_str())
@@ -95,6 +97,17 @@ mod tests {
         // 파일은 경로 자체가 걸리면 된다.
         assert!(error_skippable("a/f.py", false, &g(&["a/*"])));
         assert!(!error_skippable("a/f.py", false, &g(&["b/*"])));
+    }
+
+    #[test]
+    fn probes_cover_digit_and_dot_names_and_root_is_never_skipped() {
+        let g = |p: &[&str]| globset(&p.iter().map(|s| s.to_string()).collect::<Vec<_>>()).unwrap();
+        // 문자 클래스 쌍은 영문자로 시작하는 이름만 덮으므로 디렉터리 전체가 제외된 것이 아니다.
+        assert!(!error_skippable("d", true, &g(&["d/[A-Za-z]*", "d/[A-Za-z]*/**"])));
+        assert!(error_skippable("d", true, &g(&["d/**"])));
+        // 빈 상대 경로는 스캔 루트다.
+        assert!(!error_skippable("", true, &g(&["**"])));
+        assert!(!error_skippable("", false, &g(&["**"])));
     }
 
     #[test]
