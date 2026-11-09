@@ -7,7 +7,24 @@ rules:
       include: ["*.jsx", "*.tsx"]
     mode: taint
     pattern-sources:
-      - pattern: $SP.get(...)
+      - pattern: searchParams.get(...)
+      - pattern: $U.searchParams.get(...)
+      - pattern: new URLSearchParams(...).get(...)
+      - patterns:
+          - pattern: $SP.get(...)
+          - pattern-either:
+              - pattern-inside: |
+                  const [$SP] = useSearchParams();
+                  ...
+              - pattern-inside: |
+                  const [$SP, $SET] = useSearchParams();
+                  ...
+              - pattern-inside: |
+                  const $SP = useSearchParams();
+                  ...
+              - pattern-inside: |
+                  const $SP = new URLSearchParams(...);
+                  ...
       - pattern: $ROUTER.query
       - pattern: useParams()
       - pattern: window.location.search

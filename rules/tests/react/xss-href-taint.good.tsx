@@ -5,5 +5,6 @@ declare function safeUrl(u: string): string;
 export function Back() {
   const [params] = useSearchParams();
   const target = safeUrl(params.get("back") as string);
-  return <a href={target}>back</a>;
+  const labels = new Map<string, string>([["a", "/a"]]);
+  return <a href={target}>{labels.get("a")}<a href={labels.get("a")}>x</a></a>;
 }

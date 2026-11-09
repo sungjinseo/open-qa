@@ -9,7 +9,7 @@ rules:
       - pattern-either:
           - pattern: export default {...}
           - pattern: defineComponent({...})
-      - pattern-regex: (?m)^\s*data:\s*\{
+      - pattern-regex: (?m)^( {2}|\x09)data:\s*\{
     metadata:
       qualgate_id: vue.data-shared-object
       qualgate_severity: medium
