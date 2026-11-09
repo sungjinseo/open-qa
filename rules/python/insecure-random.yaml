@@ -8,7 +8,7 @@ rules:
           - pattern: $V = <... random.$F(...) ...>
       - metavariable-regex:
           metavariable: $V
-          regex: (?i).*(token|secret|password|passwd|otp|nonce|session|api_?key|code|salt|reset).*
+          regex: (?i)^(.*[_a-z])?(token|secret|password|passwd|otp|nonce|session|api_?key|(verification|auth|confirm|reset|invite|sms|pin)_?code|salt|reset)([_A-Z0-9].*)?$
     metadata:
       qualgate_id: python.insecure-random
       qualgate_severity: medium

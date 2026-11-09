@@ -22,7 +22,6 @@ rules:
           - pattern-either:
               - pattern: open($P, ...)
               - pattern: send_file($P, ...)
-              - pattern: send_from_directory($D, $P, ...)
               - pattern: os.remove($P)
               - pattern: Path($P)
           - focus-metavariable: $P

@@ -29,6 +29,8 @@ rules:
       - pattern: escape(...)
       - pattern: html.escape(...)
       - pattern: bleach.clean(...)
+      - pattern: jsonify(...)
+      - pattern: json.dumps(...)
     metadata:
       qualgate_id: python.xss-unescaped-output
       qualgate_severity: high
