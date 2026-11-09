@@ -198,11 +198,14 @@ spec:
     - name: REPO_ORG              # $(params.code-repo-org)
     - name: REPO_NAME             # $(params.code-repo-name)
     - name: REVISION              # $(params.code-revision) - 스캔한 브랜치
+    - name: COMMIT                # $(tasks.code-fetch.results.commit)
     - name: CONFIG_REPO           # 설정 저장소, 예: jenny/qualgate-config
     - name: CONFIG_REF
       default: main
     - name: CRT_FILENAME
       default: ca-certificates.crt
+    - name: SSL_VERIFY
+      default: "true"             # 기존 git-clone처럼 "false"로 끌 수 있음
   workspaces:
     - name: source                # shared-data
     - name: basic-auth            # gitconfig (cicdbot 자격 증명)
@@ -215,7 +218,7 @@ spec:
   steps:
     - name: fetch-config
       image: $(params.IMAGE)
-      args: [fetch-config, --repo, $(params.REPO_ORG)/$(params.REPO_NAME), --config-repo, $(params.CONFIG_REPO), --ref, $(params.CONFIG_REF), --out, /work/config]
+      args: [fetch-config, --repo, $(params.REPO_ORG)/$(params.REPO_NAME), --branch, $(params.REVISION), --commit, $(params.COMMIT), --config-repo, $(params.CONFIG_REPO), --ref, $(params.CONFIG_REF), --out, /work/config]
     - name: scan
       image: $(params.IMAGE)
       args: [scan, --src, $(workspaces.source.path)/$(params.CONTEXT_DIR), --config, /work/config, --out, /work/out]
@@ -235,8 +238,9 @@ spec:
 
 1. `code-analysis`의 `taskRef` 이름을 `qualgate`로 바꾸고 위 파라미터·workspace(`shared-data`, `gitconfig`, `ssl-ca-directory`)를 연결한다. `runAfter: [code-test]`는 유지해 커버리지 리포트를 읽는다.
 2. `failure-issue-skip-tasks`에 `code-analysis`를 넣는다. qualgate가 자세한 이슈를 올리므로 실패 이슈 Task가 같은 실패를 중복으로 올리지 않게 한다.
-3. `code-fetch`(git-clone)에 `depth` 파라미터를 준다. 기본값 1(얕은 클론)이면 신규 코드 지표를 측정할 수 없어 게이트가 건너뛰어진다. 권장값은 `0`(전체 이력) 또는 신규 코드 기간을 덮는 충분한 값.
-4. 품질 게이트 실패로 파이프라인을 멈출지는 기존 `sonar-qualitygate-wait`처럼 파이프라인 파라미터 `qualgate-fail-on-gate`(기본 `true`)로 정한다. `false`면 `publish`가 게이트 실패에도 종료 코드 0을 내고 결과(`gate`)에만 `failed`를 남긴다.
+3. `code-fetch`(git-clone)는 바꾸지 않는다. 얕은 클론이면 신규 코드 변경 줄을 Gitea API로 받는다(5.1).
+4. `SSL_VERIFY`는 `code-fetch`의 `sslVerify`와 같은 값을 넘긴다.
+5. 품질 게이트 실패로 파이프라인을 멈출지는 기존 `sonar-qualitygate-wait`처럼 파이프라인 파라미터 `qualgate-fail-on-gate`(기본 `true`)로 정한다. `false`면 `publish`가 게이트 실패에도 종료 코드 0을 내고 결과(`gate`)에만 `failed`를 남긴다.
 
 ### 5.0.1 Gitea 인증
 
@@ -250,9 +254,15 @@ spec:
 - 설정 저장소에서 `qualgate.toml`, `projects/<repo>.toml`(없으면 미등록), 사용할 룰셋 파일만 Gitea 파일 API로 받는다.
 - 받은 파일을 같은 검증 코드로 검사하고, 실패하면 종료 코드 2.
 - `--out`에 세 파일과 `source.json`(설정 저장소, ref, 커밋 sha, 미등록 여부)을 쓴다.
+- 신규 코드 변경 줄: `--src`의 git 이력이 신규 코드 기간을 덮으면 `scan`이 기존처럼 git으로 계산한다. 얕은 클론이거나 기준 커밋이 없으면 `fetch-config`가 Gitea API로 계산해 `newcode.json`(기준 커밋, HEAD 커밋, 파일별 변경 줄)을 쓴다.
+  - 기준 커밋: 대상 브랜치에서 `new_code_days`일 전 이전의 마지막 커밋(커밋 목록 API의 `until`).
+  - 변경 줄: 기준 커밋과 스캔한 커밋 사이의 diff(비교 API 또는 커밋 diff). 정확한 API는 구현 첫 단계에서 대상 Gitea로 확인한다.
+  - 스캔한 커밋은 소스의 `HEAD`다. `fetch-config`는 이를 알 수 없으므로 `--commit` 인자로 받는다(파이프라인의 `$(tasks.code-fetch.results.commit)`).
+  - API로도 구하지 못하면 신규 코드 지표는 측정 안 됨(기존 규칙).
 
 ### 5.2 `scan`
 
+- 신규 코드는 git 이력으로 계산하고, 불가능하면 `--config`의 `newcode.json`을 쓴다. 둘 다 없으면 측정 안 됨.
 - `--config` 디렉터리의 설정만 쓴다. 대상 저장소의 `.qualgate.toml`은 무시하고, 있으면 경고만 낸다.
 - 실행할 규칙 파일만 임시 디렉터리에 모아 Opengrep에 넘긴다. `overrides`는 결과를 읽은 뒤 적용한다.
 - 위반마다 `kind`를 기록한다.
@@ -277,7 +287,7 @@ spec:
 
 - `QUALGATE_CA_FILE` 환경 변수로 PEM 파일(여러 인증서 가능)을 받아, 시스템 인증서에 더해 신뢰한다. Gitea에 접속하는 `fetch-config`와 `publish`에 적용한다.
 - Tekton에서는 기존 파이프라인의 `ssl-ca-directory` workspace에 있는 `ca-certificates.crt`를 쓴다.
-- 인증서 검증을 끄는 옵션은 만들지 않는다.
+- `QUALGATE_SSL_VERIFY=false`(Task 파라미터 `SSL_VERIFY`)면 Gitea 인증서 검증을 끈다. 기존 파이프라인의 git-clone(`sslVerify: 'false'`)과 맞추기 위한 선택 사항이며 기본값은 검증 켬이다. 끈 경우 매 실행 경고를 출력한다. `QUALGATE_CA_FILE`이 있으면 검증을 켠 채 그 CA를 신뢰하는 쪽을 권장한다.
 - 파일을 읽지 못하거나 PEM이 아니면 종료 코드 2.
 
 ## 6. 설정 도구 명령
@@ -312,7 +322,7 @@ spec:
 | 미등록 저장소이고 `default_ruleset` 비어 있음 | `fetch-config` 종료 코드 2 |
 | 실행할 규칙 디렉터리가 하나도 없음 | 스캔은 진행(중복도·커버리지), 경고. `new_issues`는 0으로 측정 |
 | 결과 파일 schema 불일치 | `publish` 종료 코드 2 |
-| Gitea TLS 인증서 검증 실패 | 종료 코드 2, 추가 CA 설정 방법 안내 |
+| Gitea TLS 인증서 검증 실패 | 종료 코드 2, `QUALGATE_CA_FILE` 또는 `SSL_VERIFY` 설정 안내 |
 
 ## 9. 테스트
 
@@ -320,7 +330,7 @@ spec:
 - **스캐너 통합:** 설정 디렉터리를 쓰는 `scan`, 룰셋에서 끈 규칙이 실행되지 않음, 오버라이드된 등급·종류가 결과에 반영됨, `.qualgate.toml` 무시.
 - **publish:** 가짜 API로 게이트 판정, 핫스팟 `qualgate:safe` 처리, 끈 규칙의 이슈가 "룰셋에서 제외" 코멘트로 닫힘, 비기본 브랜치에서 판정만 함.
 - **Gitea 통합:** 기존 `tests/gitea_it.sh`(로컬 Gitea 컨테이너) 확장. 설정 저장소를 만들고 `fetch-config → scan → publish`를 실행해 이슈 생성, 핫스팟 검토 후 게이트 통과, 룰셋 변경 반영을 확인.
-- **대상 Gitea 확인:** `jenny` 조직에 테스트용 설정 저장소와 대상 저장소를 만들어 `fetch-config → scan → publish`를 로컬 컨테이너에서 한 번 실행한다. 사내 CA 인증서 파일을 받은 뒤에 실행하며, 인증서 검증은 끄지 않는다. 자격 증명은 저장소나 문서에 쓰지 않는다.
+- **대상 Gitea 확인:** `jenny` 조직에 테스트용 설정 저장소와 대상 저장소를 만들어 `fetch-config → scan → publish`를 로컬 컨테이너에서 한 번 실행한다. 사내 CA 인증서 파일이 있으면 검증을 켜고, 없으면 `SSL_VERIFY=false`로 실행한다. 자격 증명은 저장소나 문서에 쓰지 않는다.
 - **Tekton:** `deploy/tekton/*.yaml`의 YAML 구조 검사. 클러스터 등록과 실제 PipelineRun은 클러스터 연결 후 진행한다.
 - **설정 도구:** `validate-config`가 각 오류 종류를 파일·위치와 함께 보고, `init-config` 결과가 그대로 검증을 통과함, `catalog --json` 형식.
 - **Tekton:** `deploy/tekton/task.yaml`이 스키마상 유효한지 확인(kind/Tekton이 없으면 YAML 구조 검사). 실제 클러스터 실행은 사용자 환경에서 확인할 항목으로 README에 적는다.
@@ -329,4 +339,4 @@ spec:
 
 1. 대상 Gitea(1.26.4)의 파일 API로 설정 파일 읽기, 이슈·라벨 API 동작.
 2. 클러스터 연결 후: `tekton-catalog`에 Task 등록, `ssl-ca-directory`·`gitconfig` workspace 형식(`.git-credentials` 파일 이름과 줄 형식) 확인.
-3. `code-fetch`의 클론 깊이 변경 가능 여부(5.0의 3).
+3. 대상 Gitea에서 신규 코드 변경 줄을 구할 API(커밋 목록 `until`, 비교·diff API)가 동작하는지(5.1).
