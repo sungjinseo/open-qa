@@ -1,0 +1,15 @@
+# Adapted from kr-secure-coding (MIT, (c) 2026 ace30126)
+rules:
+  - id: ts.xxe
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "[행안부 IV-08 부적절한 XML 외부개체 참조] XML 파서에서 외부 엔티티(noent)를 켰습니다. XML 안에서 서버 파일을 읽거나 내부망으로 요청을 보낼 수 있습니다. noent 옵션을 끄거나 외부 엔티티 해석을 지원하지 않는 파서를 쓰세요."
+    pattern-either:
+      - pattern: '$X.parseXml($D, {..., noent: true, ...})'
+      - pattern: '$X.parseXmlString($D, {..., noent: true, ...})'
+    metadata:
+      qualgate_id: ts.xxe
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-08
+      cwe: "CWE-611"

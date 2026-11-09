@@ -1,0 +1,17 @@
+# Adapted from kr-secure-coding (MIT, (c) 2026 ace30126)
+rules:
+  - id: ts.debug-leftover
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "[행안부 EN-02 제거되지 않고 남은 디버그 코드] 비밀번호·토큰 같은 값을 콘솔에 출력합니다. 브라우저 콘솔이나 서버 로그에 남아 노출됩니다. 디버그 출력을 제거하거나 마스킹하세요."
+    patterns:
+      - pattern: console.$L(..., $X, ...)
+      - metavariable-regex:
+          metavariable: $X
+          regex: (?i).*(password|passwd|secret|token|apikey|api_key|service_?role).*
+    metadata:
+      qualgate_id: ts.debug-leftover
+      qualgate_severity: info
+      qualgate_category: security
+      qualgate_mois: EN-02
+      cwe: "CWE-489"

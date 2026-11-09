@@ -1,0 +1,20 @@
+rules:
+  - id: ts.permissive-file-mode
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "[행안부 SF-03 중요한 자원에 대한 잘못된 권한 설정] 파일·디렉터리 권한을 모든 사용자가 쓸 수 있게(0o777, 0o666) 설정합니다. 다른 계정이 중요 파일을 읽거나 변조할 수 있습니다. 필요한 최소 권한(0o600, 0o750)을 쓰세요."
+    patterns:
+      - pattern-either:
+          - pattern: $FS.chmod($P, $M, ...)
+          - pattern: $FS.chmodSync($P, $M)
+          - pattern: '$FS.mkdirSync($P, {..., mode: $M, ...})'
+          - pattern: '$FS.writeFileSync($P, $D, {..., mode: $M, ...})'
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(0o?[0-7]{2}[67]|511|438)$
+    metadata:
+      qualgate_id: ts.permissive-file-mode
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: SF-03
+      cwe: "CWE-732"

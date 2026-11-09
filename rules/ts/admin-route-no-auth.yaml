@@ -1,0 +1,19 @@
+rules:
+  - id: ts.admin-route-no-auth
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "[행안부 SF-01 적절한 인증 없는 중요 기능 허용] /admin 경로 핸들러에 인증·인가 미들웨어가 보이지 않습니다. 인증 없이 관리 기능이 호출될 수 있습니다. 라우트 앞에 인증·권한 확인 미들웨어를 붙이세요."
+    patterns:
+      - pattern-either:
+          - pattern: $APP.$M($P, ($REQ, $RES) => {...})
+          - pattern: $APP.$M($P, function ($REQ, $RES) {...})
+          - pattern: $APP.$M($P, async ($REQ, $RES) => {...})
+      - metavariable-regex:
+          metavariable: $P
+          regex: ^["']/admin
+    metadata:
+      qualgate_id: ts.admin-route-no-auth
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: SF-01
+      cwe: "CWE-306"

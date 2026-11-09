@@ -1,0 +1,16 @@
+rules:
+  - id: ts.fetch-no-catch
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "[행안부 EH-02 오류상황 대응 부재] fetch(...).then(...) 체인에 .catch가 없습니다. 네트워크·서버 오류가 처리되지 않은 Promise 거부가 되어 화면이 멈추거나 실패가 조용히 무시됩니다. .catch 또는 try/await로 오류를 처리하세요."
+    patterns:
+      - pattern: fetch(...).then(...)
+      - pattern-not: fetch(...).then(...).catch(...)
+      - pattern-not-inside: |
+          $P.catch(...)
+    metadata:
+      qualgate_id: ts.fetch-no-catch
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: EH-02
+      cwe: "CWE-390"

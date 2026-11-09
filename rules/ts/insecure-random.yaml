@@ -1,0 +1,20 @@
+# Adapted from kr-secure-coding (MIT, (c) 2026 ace30126)
+rules:
+  - id: ts.insecure-random
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "[행안부 SF-08 적절하지 않은 난수 값 사용] Math.random()으로 토큰·비밀번호·인증 코드를 만듭니다. 결과가 예측 가능합니다. crypto.randomUUID()나 crypto.randomBytes()를 쓰세요."
+    patterns:
+      - pattern-either:
+          - pattern: const $V = <... Math.random() ...>
+          - pattern: let $V = <... Math.random() ...>
+          - pattern: $V = <... Math.random() ...>
+      - metavariable-regex:
+          metavariable: $V
+          regex: (?i).*(token|secret|password|passwd|otp|nonce|session|apikey|api_key|code|salt|invite|reset).*
+    metadata:
+      qualgate_id: ts.insecure-random
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: SF-08
+      cwe: "CWE-338"

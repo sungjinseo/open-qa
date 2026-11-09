@@ -1,0 +1,19 @@
+# Adapted from kr-secure-coding (MIT, (c) 2026 ace30126)
+rules:
+  - id: ts.cors-wildcard
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "[행안부 확장 VC-03 과도하게 열린 CORS] CORS를 모든 출처(*)에 열었습니다. 인증이 필요한 API라면 다른 사이트의 스크립트가 사용자 권한으로 호출할 수 있습니다. 허용할 도메인을 명시하세요."
+    pattern-either:
+      - pattern: cors()
+      - pattern: 'cors({..., origin: "*", ...})'
+      - pattern: 'cors({..., origin: true, credentials: true, ...})'
+      - pattern: $H.setHeader("Access-Control-Allow-Origin", "*")
+      - pattern: $H.set("Access-Control-Allow-Origin", "*")
+      - pattern: '{..., "Access-Control-Allow-Origin": "*", ...}'
+    metadata:
+      qualgate_id: ts.cors-wildcard
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: VC-03
+      cwe: "CWE-942"

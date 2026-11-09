@@ -1,0 +1,16 @@
+rules:
+  - id: ts.document-cookie-insecure
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "[행안부 SF-12 쿠키를 통한 정보노출] document.cookie에 값을 쓰면서 Secure 속성이 보이지 않습니다. 쿠키가 평문 HTTP로도 전송되며 스크립트로 읽힙니다(HttpOnly는 JS로 설정할 수 없음). 세션 쿠키는 서버가 Set-Cookie로 HttpOnly; Secure를 지정해 발급하세요."
+    patterns:
+      - pattern: document.cookie = $X
+      - metavariable-regex:
+          metavariable: $X
+          regex: (?is)^(?!.*secure).*$
+    metadata:
+      qualgate_id: ts.document-cookie-insecure
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: SF-12
+      cwe: "CWE-614"

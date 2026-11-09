@@ -1,0 +1,14 @@
+rules:
+  - id: ts.postmessage-wildcard
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "[행안부 SF-05 암호화되지 않은 중요정보] postMessage의 targetOrigin을 \"*\"로 지정합니다. 메시지에 담긴 값이 어떤 출처의 창에도 전달됩니다. 받을 창의 정확한 출처를 지정하세요."
+    pattern-either:
+      - pattern: $W.postMessage($M, "*")
+      - pattern: $W.postMessage($M, "*", ...)
+    metadata:
+      qualgate_id: ts.postmessage-wildcard
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: SF-05
+      cwe: "CWE-345"

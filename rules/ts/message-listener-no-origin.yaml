@@ -1,0 +1,17 @@
+rules:
+  - id: ts.message-listener-no-origin
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "[행안부 IV-15 보안기능 결정에 사용되는 부적절한 입력값] message 이벤트 핸들러가 event.origin을 확인하지 않습니다. 다른 사이트가 보낸 메시지를 신뢰해 처리하게 됩니다. 허용한 출처인지 비교한 뒤에만 데이터를 쓰세요."
+    patterns:
+      - pattern-either:
+          - pattern: $W.addEventListener("message", ($E) => {...})
+          - pattern: $W.addEventListener("message", function ($E) {...})
+      - pattern-not: $W.addEventListener("message", ($E) => {... if (<... $E.origin ...>) {...} ...})
+      - pattern-not: $W.addEventListener("message", function ($E) {... if (<... $E.origin ...>) {...} ...})
+    metadata:
+      qualgate_id: ts.message-listener-no-origin
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: IV-15
+      cwe: "CWE-346"

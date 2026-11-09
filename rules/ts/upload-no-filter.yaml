@@ -1,0 +1,16 @@
+rules:
+  - id: ts.upload-no-filter
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "[행안부 IV-06 위험한 형식 파일 업로드] multer 업로드에 fileFilter가 없습니다. 실행 가능한 파일(.js, .php, .html)을 올려 서버나 다른 사용자를 공격할 수 있습니다. 확장자·MIME 허용 목록(fileFilter)과 limits.fileSize를 지정하세요."
+    patterns:
+      - pattern-either:
+          - pattern: multer({...})
+          - pattern: multer()
+      - pattern-not: 'multer({..., fileFilter: $F, ...})'
+    metadata:
+      qualgate_id: ts.upload-no-filter
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: IV-06
+      cwe: "CWE-434"

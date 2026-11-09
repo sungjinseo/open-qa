@@ -1,0 +1,30 @@
+# Adapted from kr-secure-coding (MIT, (c) 2026 ace30126)
+rules:
+  - id: ts.sql-string-build
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "[행안부 IV-01 SQL 삽입] 문자열 연결이나 템플릿 리터럴로 SQL을 만들어 실행합니다. 공격자가 입력값으로 쿼리를 바꿔 데이터를 조회·변조할 수 있습니다. 파라미터 바인딩($1, ?)이나 쿼리 빌더를 사용하고, 테이블·컬럼 이름은 허용 목록과 비교하세요."
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: $DB.query($Q, ...)
+              - pattern: $DB.execute($Q, ...)
+              - pattern: $DB.raw($Q, ...)
+          - metavariable-pattern:
+              metavariable: $Q
+              pattern-either:
+                - pattern: '`...${$X}...`'
+                - pattern: '"..." + $X'
+                - pattern: '$X + "..."'
+          - metavariable-regex:
+              metavariable: $Q
+              regex: (?is).*\b(select|insert|update|delete|where|from)\b.*
+      - pattern: $P.$queryRawUnsafe(...)
+      - pattern: $P.$executeRawUnsafe(...)
+      - pattern: sql.unsafe(...)
+    metadata:
+      qualgate_id: ts.sql-string-build
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-01
+      cwe: "CWE-89"

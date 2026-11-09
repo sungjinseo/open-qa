@@ -1,0 +1,29 @@
+# Adapted from kr-secure-coding (MIT, (c) 2026 ace30126)
+rules:
+  - id: ts.code-eval
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "[행안부 IV-02 코드 삽입] 문자열을 코드로 실행합니다(eval, new Function, 문자열 setTimeout). 외부 값이 섞이면 서버나 브라우저에서 임의 코드가 실행됩니다. JSON.parse나 명시적인 분기로 대체하세요."
+    pattern-either:
+      - patterns:
+          - pattern: eval($X)
+          - pattern-not: eval("...")
+      - patterns:
+          - pattern: new Function(..., $X)
+          - pattern-not: new Function(..., "...")
+      - patterns:
+          - pattern-either:
+              - pattern: setTimeout($X, ...)
+              - pattern: setInterval($X, ...)
+          - metavariable-pattern:
+              metavariable: $X
+              pattern-either:
+                - pattern: '`...${...}...`'
+                - pattern: '"..." + $Y'
+                - pattern: '"..."'
+    metadata:
+      qualgate_id: ts.code-eval
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-02
+      cwe: "CWE-95"

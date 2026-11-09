@@ -1,0 +1,12 @@
+rules:
+  - id: ts.plain-http-url
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "[행안부 SF-05 암호화되지 않은 중요정보] http:// 주소로 통신합니다. 전송 중 비밀번호·토큰·개인정보가 평문으로 노출됩니다. https:// 를 사용하세요."
+    pattern-regex: (fetch|axios[\w.]*)\(\s*["'`]http://(?!localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])
+    metadata:
+      qualgate_id: ts.plain-http-url
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: SF-05
+      cwe: "CWE-319"
