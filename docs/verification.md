@@ -77,3 +77,19 @@ Sonar Community 26.11.0.134175 (loaded image, unmodified, `SONAR_ES_BOOTSTRAP_CH
 | qualgate `metrics.duplication` | 85.1% | 74 / 87 (Clone1.java 4-40, Clone2.java 4-40) |
 
 Difference 7.3 percentage points, under the 10 point threshold, so no deeper investigation. Both tools found exactly the two clone files and nothing else. Sonar's duplicated range covers 35 lines per file and counts 90 total lines, qualgate's covers 37 of 87 (`text.lines().count()`). The two-line difference per file is probably how the closing-brace lines of the last block and the line total are counted; not confirmed.
+
+## Final review fixes (measured 2026-11-06, Opengrep 1.33.1)
+
+### Opengrep target filtering
+
+With `--no-git-ignore --x-ignore-semgrepignore-files --max-target-bytes=0` and no `--exclude`, `paths.scanned` included a 1.5MB file, `.gitignore`d and `.semgrepignore`d files, `tests/`, `test/`, `src/test/`, `com/acme/test/`, `node_modules/`, `build/`, `dist/`, `vendor/` and a path with space, `#` and Hangul. Exit 0, `skipped_rules: []`, `errors: []` on the default pack.
+
+Extensions in `paths.scanned` with a rule for `[javascript, typescript]` and no path filter: `js`, `jsx`, `mjs`, `cjs`, `ts`, `tsx`, `d.ts`, `min.js`. Never scanned: `mts`, `cts`. With the default pack (React rules only include `*.jsx`, `*.tsx`) plain `js`/`ts`/`mjs`/`cjs` are not scanned either. `kts` is scanned. Decision: keep these extensions in `Lang::of` (duplication and coverage still measure them) and do not require them in `paths.scanned`, so they never become permanent unanalyzed noise.
+
+`--exclude` semantics differ from qualgate's globs: `--exclude=h.py` also drops `x/h.py`, `--exclude=docs/*.py` also drops `x/docs/f.py`, `--exclude='*.py'` drops everything. Only `**/<name>/**` matched qualgate's meaning, so only that form is passed (for speed) and qualgate filters the rest. Speed on 11,117 files (10,000 under `node_modules`/`vendor`): 8s with the two directory excludes, 27s without.
+
+Engine errors: an invalid pattern gives exit 2 with pathless `level: error`, `rule_id` set (already fatal); an unknown language gives exit 8. A syntax error in a target gives `level: warn` with a path (unanalyzed, as before).
+
+### Gitea markdown (1.27, `/markdown` API and notifications)
+
+`@user` in a table cell links and notifies. `\@user` and `&#64;user` still render as mention links. `@` followed by U+200B does not link and sent no notification. `\[y](url)` inside a table cell still produced a link. Entities `&#91;`, `&lt;`, `&#96;` render literally. A mention inside the HTML state comment did not notify.
