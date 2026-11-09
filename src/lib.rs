@@ -1,3 +1,4 @@
+pub mod catalog;
 pub mod config;
 pub mod coverage;
 pub mod dup;
@@ -9,6 +10,7 @@ pub mod newcode;
 pub mod render;
 pub mod rules;
 pub mod scan;
+pub mod settings;
 pub mod sync;
 pub mod track;
 pub mod vue;

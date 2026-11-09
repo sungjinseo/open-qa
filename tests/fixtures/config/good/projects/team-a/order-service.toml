@@ -1,0 +1,14 @@
+schema = 1
+repo = "team-a/order-service"
+ruleset = "backend-standard"
+languages = ["java"]
+
+[[gate]]
+metric = "new_issues"
+op = "gt"
+value = 0
+
+[[gate]]
+metric = "new_coverage"
+op = "lt"
+value = 80.0

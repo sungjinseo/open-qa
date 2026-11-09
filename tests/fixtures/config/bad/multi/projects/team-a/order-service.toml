@@ -1,0 +1,13 @@
+schema = 1
+repo = "team-a/order-service"
+ruleset = "backend-standard"
+
+[[gate]]
+metric = "new_issues"
+op = "gt"
+value = 0
+
+[[gate]]
+metric = "new_issues"
+op = "gt"
+value = 1

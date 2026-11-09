@@ -1,0 +1,7 @@
+schema = 1
+default_ruleset = "backend-standard"
+
+[[default_gate]]
+metric = "new_issues"
+op = "gt"
+value = 0

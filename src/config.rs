@@ -109,22 +109,33 @@ impl Config {
             // 오타를 무시하면 해당 등급이 차단되지 않아 게이트가 열린다.
             if Severity::parse(sev).is_none() { bail!("gate.blocking_severities 값이 잘못되었습니다: {sev}"); }
         }
-        ensure!(self.duplication.block_lines >= 1, "duplication.block_lines는 1 이상이어야 합니다");
-        ensure!(self.duplication.min_tokens >= 1, "duplication.min_tokens는 1 이상이어야 합니다");
-        if self.publish.labels.iter().any(|l| l.eq_ignore_ascii_case(IGNORED_LABEL)) {
-            bail!("publish.labels에 {IGNORED_LABEL}을(를) 넣을 수 없습니다");
-        }
-        let n = self.publish.max_new_issues.clamp(1, 100);
-        if n != self.publish.max_new_issues {
-            eprintln!("경고: publish.max_new_issues {}을(를) {n}(으)로 조정합니다 (허용 범위 1~100)", self.publish.max_new_issues);
-            self.publish.max_new_issues = n;
-        }
-        Ok(())
+        validate_dup(&self.duplication)?;
+        validate_publish(&mut self.publish)
     }
 }
 
+/// 중복도 설정 검증. `Config`와 설정 저장소의 프로젝트 파일이 함께 쓴다.
+pub fn validate_dup(d: &DupCfg) -> Result<()> {
+    ensure!(d.block_lines >= 1, "duplication.block_lines는 1 이상이어야 합니다");
+    ensure!(d.min_tokens >= 1, "duplication.min_tokens는 1 이상이어야 합니다");
+    Ok(())
+}
+
+/// 게시 설정 검증. `max_new_issues`는 1~100으로 조정한다.
+pub fn validate_publish(p: &mut PublishCfg) -> Result<()> {
+    if p.labels.iter().any(|l| l.eq_ignore_ascii_case(IGNORED_LABEL)) {
+        bail!("publish.labels에 {IGNORED_LABEL}을(를) 넣을 수 없습니다");
+    }
+    let n = p.max_new_issues.clamp(1, 100);
+    if n != p.max_new_issues {
+        eprintln!("경고: publish.max_new_issues {}을(를) {n}(으)로 조정합니다 (허용 범위 1~100)", p.max_new_issues);
+        p.max_new_issues = n;
+    }
+    Ok(())
+}
+
 /// 바이트 위치를 1부터 시작하는 줄과 열로 바꾼다.
-fn position(text: &str, offset: usize) -> (usize, usize) {
+pub(crate) fn position(text: &str, offset: usize) -> (usize, usize) {
     let before = &text.as_bytes()[..offset.min(text.len())];
     let line = before.iter().filter(|b| **b == b'\n').count() + 1;
     let col = before.iter().rev().take_while(|b| **b != b'\n').count() + 1;

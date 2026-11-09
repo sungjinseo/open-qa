@@ -1,0 +1,8 @@
+schema = 1
+name = "backend-standard"
+
+[languages.java]
+disabled_rules = ["java.nope"]
+
+[overrides."python.nope"]
+severity = "low"

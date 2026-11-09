@@ -1,0 +1,14 @@
+schema = 1
+name = "backend-standard"
+description = "backend common"
+
+[languages.java]
+enabled = true
+disabled_rules = ["java.system-out"]
+
+[languages.python]
+enabled = true
+
+[overrides."java.catch-throwable"]
+severity = "low"
+kind = "hotspot"
