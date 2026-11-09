@@ -36,7 +36,7 @@ done
 # 남아야 한다. 컨테이너 안에서 비root 사용자로 만들어야 권한이 실제로 적용된다.
 docker run --rm --network none --entrypoint sh qualgate:dev -c '
 set -u
-mk() { rm -rf /tmp/r; mkdir -p /tmp/r/priv && cd /tmp/r && git init -qb main
+mk() { chmod -R u+rwx /tmp/r 2>/dev/null; rm -rf /tmp/r; mkdir -p /tmp/r/priv && cd /tmp/r && git init -qb main
   printf "eval(input())
 " > a.py; printf "eval(input())
 " > priv/p.py
