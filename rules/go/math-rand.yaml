@@ -1,11 +1,18 @@
 rules:
   - id: go.math-rand
     languages: [go]
-    severity: INFO
-    message: "math/rand는 예측 가능해 토큰이나 키 생성에 부적합합니다. crypto/rand를 사용하세요."
-    pattern: |
-      rand.Intn(...)
+    severity: WARNING
+    message: "[행안부 SF-08 적절하지 않은 난수 값 사용] math/rand는 예측 가능한 난수입니다. 토큰·인증번호·비밀번호를 만들면 값이 추측됩니다. crypto/rand를 쓰세요."
+    pattern-either:
+      - pattern: rand.Intn(...)
+      - pattern: rand.Int63(...)
+      - pattern: rand.Int31(...)
+      - pattern: rand.Float64()
+      - pattern: rand.Seed(...)
+      - pattern: rand.NewSource(...)
     metadata:
       qualgate_id: go.math-rand
-      qualgate_severity: low
+      qualgate_severity: medium
       qualgate_category: security
+      qualgate_mois: SF-08
+      cwe: "CWE-338"

@@ -1,0 +1,12 @@
+rules:
+  - id: go.unchecked-type-assertion
+    languages: [go]
+    severity: INFO
+    message: "[행안부 CE-01 Null Pointer 역참조] 타입 단언을 ok 확인 없이 씁니다. 값이 nil이거나 다른 타입이면 panic으로 프로세스가 중단됩니다. v, ok := x.(T) 형태로 확인하세요."
+    pattern-regex: (?m)^\s*\w+\s*:=\s*[\w.\[\]]+\.\((?!type\))[\w.*\[\]]+\)\s*$
+    metadata:
+      qualgate_id: go.unchecked-type-assertion
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: CE-01
+      cwe: "CWE-476"

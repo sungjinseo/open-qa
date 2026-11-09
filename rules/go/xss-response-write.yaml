@@ -1,0 +1,39 @@
+rules:
+  - id: go.xss-response-write
+    languages: [go]
+    severity: ERROR
+    message: "[행안부 IV-04 크로스사이트 스크립트] 요청 값을 이스케이프 없이 응답 본문에 직접 씁니다. 다른 사용자의 브라우저에서 스크립트가 실행됩니다. html.EscapeString()으로 인코딩하거나 html/template을 쓰세요."
+    mode: taint
+    pattern-sources:
+      - pattern: $R.URL.Query().Get(...)
+      - pattern: $R.FormValue(...)
+      - pattern: $R.PostFormValue(...)
+      - pattern: $R.Header.Get(...)
+      - pattern: mux.Vars($R)
+      - pattern: $C.Query(...)
+      - pattern: $C.Param(...)
+      - pattern: $C.QueryParam(...)
+      - pattern: $C.PostForm(...)
+
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: fmt.Fprintf($W, $F, ..., $A, ...)
+              - pattern: fmt.Fprint($W, ..., $A, ...)
+              - pattern: fmt.Fprintln($W, ..., $A, ...)
+          - pattern-not: fmt.Fprintf($W, $A, ...)
+          - focus-metavariable: $A
+      - patterns:
+          - pattern-either:
+              - pattern: io.WriteString($W, $S)
+              - pattern: $W.Write([]byte($S))
+          - focus-metavariable: $S
+    pattern-sanitizers:
+      - pattern: html.EscapeString(...)
+      - pattern: template.HTMLEscapeString(...)
+    metadata:
+      qualgate_id: go.xss-response-write
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-04
+      cwe: "CWE-79"

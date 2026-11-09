@@ -1,10 +1,10 @@
 package conf
 
-import "strconv"
+import "os"
 
-func Port(s string) int {
-	n, err := strconv.Atoi(s)
+func Load(path string) []byte {
+	data, err := os.ReadFile(path)
 	if err != nil {
 	}
-	return n
+	return data
 }

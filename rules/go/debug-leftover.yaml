@@ -1,0 +1,15 @@
+rules:
+  - id: go.debug-leftover
+    languages: [go]
+    severity: INFO
+    message: "[행안부 EN-02 제거되지 않고 남은 디버그 코드] pprof 핸들러나 gin 디버그 모드 같은 디버그 기능이 남아 있습니다. 운영 환경에서 메모리·고루틴 등 내부 상태가 외부에 노출됩니다. 운영에서는 제거하거나 내부 포트·인증 뒤로 옮기세요."
+    pattern-either:
+      - pattern: import _ "net/http/pprof"
+      - pattern: gin.SetMode(gin.DebugMode)
+      - pattern: debug.PrintStack()
+    metadata:
+      qualgate_id: go.debug-leftover
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: EN-02
+      cwe: "CWE-489"

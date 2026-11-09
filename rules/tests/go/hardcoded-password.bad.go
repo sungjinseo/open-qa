@@ -1,6 +1,6 @@
 package conf
 
-func Connect() string {
-	dbPassword := "hunter2"
-	return dbPassword
+func DSN() string {
+	dbPassword := "P@ssw0rd-prod"
+	return "user:" + dbPassword + "@tcp(db:3306)/app"
 }

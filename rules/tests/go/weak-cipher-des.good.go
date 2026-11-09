@@ -5,6 +5,10 @@ import (
 	"crypto/cipher"
 )
 
-func New(key []byte) (cipher.Block, error) {
-	return aes.NewCipher(key)
+func Make(key []byte) (cipher.AEAD, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	return cipher.NewGCM(block)
 }

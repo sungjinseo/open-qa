@@ -1,0 +1,36 @@
+rules:
+  - id: go.path-traversal
+    languages: [go]
+    severity: ERROR
+    message: "[행안부 IV-03 경로 조작 및 자원 삽입] 요청 값이 검증 없이 파일 경로로 쓰입니다. ../ 로 허용 디렉터리 밖의 파일을 읽거나 지울 수 있습니다. filepath.Base()로 파일 이름만 쓰고 filepath.Join 결과가 기준 디렉터리 안인지 확인하세요."
+    mode: taint
+    pattern-sources:
+      - pattern: $R.URL.Query().Get(...)
+      - pattern: $R.FormValue(...)
+      - pattern: $R.PostFormValue(...)
+      - pattern: $R.Header.Get(...)
+      - pattern: mux.Vars($R)
+      - pattern: $C.Query(...)
+      - pattern: $C.Param(...)
+      - pattern: $C.QueryParam(...)
+      - pattern: $C.PostForm(...)
+
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: os.Open($P)
+              - pattern: os.ReadFile($P)
+              - pattern: os.Create($P)
+              - pattern: os.Remove($P)
+              - pattern: os.OpenFile($P, ...)
+              - pattern: ioutil.ReadFile($P)
+              - pattern: http.ServeFile($W, $RQ, $P)
+          - focus-metavariable: $P
+    pattern-sanitizers:
+      - pattern: filepath.Base(...)
+    metadata:
+      qualgate_id: go.path-traversal
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-03
+      cwe: "CWE-22"

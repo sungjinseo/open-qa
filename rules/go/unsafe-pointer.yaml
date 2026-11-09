@@ -1,0 +1,14 @@
+rules:
+  - id: go.unsafe-pointer
+    languages: [go]
+    severity: INFO
+    message: "[행안부 IV-16 메모리 버퍼 오버플로우] unsafe.Pointer로 타입 검사와 경계 검사를 우회합니다. 크기·정렬이 맞지 않으면 메모리 오염이나 버퍼 오버플로우가 생깁니다. 꼭 필요한 곳에만 쓰고 encoding/binary 등 안전한 대안을 먼저 검토하세요."
+    pattern-either:
+      - pattern: unsafe.Pointer(...)
+      - pattern: unsafe.Slice(...)
+    metadata:
+      qualgate_id: go.unsafe-pointer
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: IV-16
+      cwe: "CWE-119"

@@ -2,8 +2,7 @@ package conf
 
 import "os"
 
-func Connect() string {
+func DSN() string {
 	dbPassword := os.Getenv("DB_PASSWORD")
-	user := "admin"
-	return user + ":" + dbPassword
+	return "user:" + dbPassword + "@tcp(db:3306)/app"
 }

@@ -1,0 +1,21 @@
+rules:
+  - id: go.template-html-unescaped
+    languages: [go]
+    severity: WARNING
+    message: "[행안부 IV-04 크로스사이트 스크립트] template.HTML·template.JS 등으로 값을 안전한 문자열로 표시해 html/template의 자동 이스케이프를 우회합니다. 값에 입력이 섞이면 XSS가 됩니다. 문자열 그대로 템플릿에 넘겨 자동 이스케이프에 맡기세요."
+    patterns:
+      - pattern-either:
+          - pattern: template.HTML($X)
+          - pattern: template.JS($X)
+          - pattern: template.HTMLAttr($X)
+          - pattern: template.URL($X)
+      - pattern-not: template.HTML("...")
+      - pattern-not: template.JS("...")
+      - pattern-not: template.HTMLAttr("...")
+      - pattern-not: template.URL("...")
+    metadata:
+      qualgate_id: go.template-html-unescaped
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: IV-04
+      cwe: "CWE-79"

@@ -1,0 +1,14 @@
+rules:
+  - id: go.gob-decode-request
+    languages: [go]
+    severity: INFO
+    message: "[행안부 CE-05 신뢰할 수 없는 데이터의 역직렬화] 요청 본문이나 네트워크 연결에서 바로 gob 역직렬화를 합니다. 신뢰할 수 없는 입력이 임의 타입 생성과 자원 소모를 일으킬 수 있습니다. JSON 같은 데이터 전용 형식과 크기 제한(http.MaxBytesReader)을 쓰세요."
+    pattern-either:
+      - pattern: gob.NewDecoder($R.Body)
+      - pattern: gob.NewDecoder($C)
+    metadata:
+      qualgate_id: go.gob-decode-request
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: CE-05
+      cwe: "CWE-502"

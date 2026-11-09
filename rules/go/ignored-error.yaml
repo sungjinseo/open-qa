@@ -2,10 +2,13 @@ rules:
   - id: go.ignored-error
     languages: [go]
     severity: WARNING
-    message: "error 반환값을 _로 버리면 실패를 놓쳐 잘못된 값으로 계속 진행합니다. 에러를 확인하고 처리하세요."
-    pattern: |
-      $X, _ := $F(...)
+    message: "[행안부 EH-02 오류상황 대응 부재] 함수가 돌려준 error를 _ 로 버립니다. 실패가 조용히 무시되어 이후 로직이 잘못된 값(0, nil)으로 진행됩니다. error를 확인해 처리하거나 상위로 반환하세요."
+    pattern-either:
+      - pattern: $X, _ := $F(...)
+      - pattern: $X, _ = $F(...)
     metadata:
       qualgate_id: go.ignored-error
       qualgate_severity: medium
-      qualgate_category: reliability
+      qualgate_category: security
+      qualgate_mois: EH-02
+      cwe: "CWE-390"

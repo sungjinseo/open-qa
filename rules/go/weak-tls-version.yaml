@@ -1,0 +1,15 @@
+rules:
+  - id: go.weak-tls-version
+    languages: [go]
+    severity: WARNING
+    message: "[행안부 SF-04 취약한 암호화 알고리즘 사용] TLS 최소 버전을 1.2 미만(SSL 3.0, TLS 1.0, 1.1)으로 허용합니다. 알려진 공격(POODLE, BEAST)에 노출됩니다. MinVersion을 tls.VersionTLS12 이상으로 지정하세요."
+    pattern-either:
+      - pattern: 'tls.Config{..., MinVersion: tls.VersionTLS10, ...}'
+      - pattern: 'tls.Config{..., MinVersion: tls.VersionTLS11, ...}'
+      - pattern: 'tls.Config{..., MinVersion: tls.VersionSSL30, ...}'
+    metadata:
+      qualgate_id: go.weak-tls-version
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: SF-04
+      cwe: "CWE-327"

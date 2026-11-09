@@ -1,0 +1,15 @@
+rules:
+  - id: go.cookie-flags
+    languages: [go]
+    severity: WARNING
+    message: "[행안부 SF-12 쿠키를 통한 정보노출] http.Cookie에 Secure와 HttpOnly가 모두 설정되지 않았습니다. 쿠키가 평문으로 전송되거나 스크립트로 탈취됩니다. Secure: true, HttpOnly: true, SameSite를 지정하세요."
+    patterns:
+      - pattern: http.Cookie{...}
+      - pattern-not: 'http.Cookie{..., Secure: true, ..., HttpOnly: true, ...}'
+      - pattern-not: 'http.Cookie{..., HttpOnly: true, ..., Secure: true, ...}'
+    metadata:
+      qualgate_id: go.cookie-flags
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: SF-12
+      cwe: "CWE-614"

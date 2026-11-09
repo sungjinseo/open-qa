@@ -1,0 +1,28 @@
+rules:
+  - id: go.client-controlled-auth
+    languages: [go]
+    severity: WARNING
+    message: "[행안부 IV-15 보안기능 결정에 사용되는 부적절한 입력값] 요청 헤더·쿠키·폼 값처럼 클라이언트가 바꿀 수 있는 값으로 권한을 판단합니다. 값을 조작해 관리자 기능을 쓸 수 있습니다. 서버 세션이나 서명 검증된 토큰의 값으로 판단하세요."
+    patterns:
+      - pattern-either:
+          - pattern: |
+              if <... $R.Header.Get($N) ...> {
+                  ...
+              }
+          - pattern: |
+              if <... $R.FormValue($N) ...> {
+                  ...
+              }
+          - pattern: |
+              if <... $R.URL.Query().Get($N) ...> {
+                  ...
+              }
+      - metavariable-regex:
+          metavariable: $N
+          regex: (?i)^"[^"]*(admin|role|auth|privilege)[^"]*"$
+    metadata:
+      qualgate_id: go.client-controlled-auth
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: IV-15
+      cwe: "CWE-807"
