@@ -9,8 +9,15 @@ const MARK: &str = "<!-- qualgate:v1 ";
 const TITLE_PREFIX: &str = "[qualgate]";
 const COMMIT_LINE: &str = "**커밋:**";
 
+/// 렌더러가 바뀌어 본문 형식이 달라질 때 올린다. 저장된 값과 다르면 이슈 본문을 한 번 다시 쓴다.
+pub const RENDER_VERSION: u32 = 1;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct IssueState { pub key: String, pub part: usize, pub items: Vec<Item> }
+pub struct IssueState {
+    pub key: String, pub part: usize, pub items: Vec<Item>,
+    /// 렌더 버전. 없으면 0(이 필드 도입 전 이슈).
+    #[serde(default)] pub v: u32,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Part { pub title: String, pub body: String, pub items: Vec<Item> }
@@ -35,10 +42,12 @@ fn parse_marker(body: &str, must_end_body: bool) -> Option<IssueState> {
 /// 상태 주석은 본문 끝에 있어야 한다. 뒤에 글이 이어지면 인용된 것이므로 무시한다.
 pub fn parse_state(body: &str) -> Option<IssueState> { parse_marker(body, true) }
 
-/// qualgate 제목의 이슈는 사람이 상태 주석 아래에 글을 덧붙여도 추적을 잃지 않게 한다.
-/// 그 제목이 아니면 사람이 만든 이슈일 수 있으므로 엄격한 규칙을 유지한다.
+/// 봇 이슈는 제목이 `[qualgate]`로 시작하고 상태 주석이 있는 것뿐이다. 제목이 다르면 사람이 만든 이슈
+/// (상태 주석을 인용했을 수도 있다)이므로 관리하지 않는다. 봇 제목이면 사람이 주석 아래에 글을 덧붙여도
+/// 추적을 잃지 않게 마지막 마커를 받아들인다.
 pub fn parse_issue_state(title: &str, body: &str) -> Option<IssueState> {
-    parse_marker(body, !title.starts_with(TITLE_PREFIX))
+    if !title.starts_with(TITLE_PREFIX) { return None; }
+    parse_marker(body, false)
 }
 
 /// 커밋 줄을 빼고 같은지 본다. 커밋만 바뀐 요약은 갱신할 이유가 없다.
@@ -62,6 +71,8 @@ fn esc(s: &str) -> String {
             '`' => out.push_str("&#96;"),
             '|' => out.push_str("&#124;"),
             '\\' => out.push_str("&#92;"),
+            '_' => out.push_str("&#95;"),
+            '*' => out.push_str("&#42;"),
             '@' => out.push_str("@\u{200b}"),
             '\n' | '\r' => out.push(' '),
             _ => out.push(c),
@@ -108,7 +119,7 @@ fn finish_parts(key: &str, title: &str, chunks: Vec<Vec<Item>>, table: impl Fn(&
     let n = chunks.len();
     chunks.into_iter().enumerate().map(|(i, items)| {
         let t = if n > 1 { format!("{title} ({}/{n})", i + 1) } else { title.to_string() };
-        let st = IssueState { key: key.to_string(), part: i, items: items.clone() };
+        let st = IssueState { key: key.to_string(), part: i, items: items.clone(), v: RENDER_VERSION };
         Part { title: t, body: format!("{}\n\n{}\n", table(&items), state_comment(&st)), items }
     }).collect()
 }
@@ -187,7 +198,7 @@ pub fn summary(r: &ScanResult, skipped: usize) -> (String, String) {
     list("커버리지 리포트 미포함", &r.coverage_status.not_in_report, &mut b);
     list("리포트 경로 매칭 실패", &r.coverage_status.unresolved, &mut b);
     if skipped > 0 { b.push_str(&format!("생성 제한으로 이번에 등록하지 못한 이슈: {skipped}개\n\n")); }
-    let st = IssueState { key: SUMMARY_KEY.to_string(), part: 0, items: vec![] };
+    let st = IssueState { key: SUMMARY_KEY.to_string(), part: 0, items: vec![], v: RENDER_VERSION };
     b.push_str(&state_comment(&st));
     b.push('\n');
     ("[qualgate] 품질 요약".to_string(), b)
@@ -294,7 +305,7 @@ mod tests {
 
     #[test]
     fn quoted_marker_followed_by_prose_is_not_state() {
-        let st = IssueState { key: "rule:r:a.java".into(), part: 0, items: vec![] };
+        let st = IssueState { key: "rule:r:a.java".into(), part: 0, items: vec![], v: RENDER_VERSION };
         let quoted = format!("> {}\n\n이건 사람이 인용한 것입니다.", state_comment(&st));
         assert_eq!(parse_state(&quoted), None);
         assert!(parse_state(&format!("본문\n{}\n\n", state_comment(&st))).is_some());
@@ -302,12 +313,35 @@ mod tests {
 
     #[test]
     fn text_below_state_is_accepted_only_with_qualgate_title() {
-        let st = IssueState { key: "rule:r:a.java".into(), part: 0, items: vec![] };
+        let st = IssueState { key: "rule:r:a.java".into(), part: 0, items: vec![], v: RENDER_VERSION };
         let body = format!("표\n{}\n\n담당자가 덧붙인 글", state_comment(&st));
         assert_eq!(parse_issue_state("[qualgate] r: a.java (1건)", &body).unwrap().key, st.key);
         assert_eq!(parse_issue_state("사람이 만든 이슈", &body), None);
         assert_eq!(parse_issue_state("[qualgate] 사람 글", "마커 없음"), None);
-        assert!(parse_issue_state("사람이 만든 이슈", &format!("표\n{}\n", state_comment(&st))).is_some());
+        // 제목이 다르면 상태 주석이 본문 끝에 있어도 사람 이슈다(인용일 수 있다).
+        assert_eq!(parse_issue_state("사람이 만든 이슈", &format!("> {}", state_comment(&st))), None);
+        assert_eq!(parse_issue_state("[qualgate] r: a.java (1건)", &format!("표\n{}\n", state_comment(&st))).unwrap().key, st.key);
+    }
+
+    #[test]
+    fn underscores_and_asterisks_are_escaped_in_text_not_urls() {
+        let mut r = result();
+        r.findings = vec![f("r_x", "pkg/__init__.py", 1, "__proto__ and *bold*", Severity::Low)];
+        r.clones.clear();
+        let body = &desired(&r, "http://g", "o/r")[0].parts[0].body;
+        let shown = &body[..body.rfind(MARK).unwrap()];
+        assert!(shown.contains("&#95;&#95;init&#95;&#95;.py:1]"), "{shown}");
+        assert!(shown.contains("&#95;&#95;proto&#95;&#95; and &#42;bold&#42;"), "{shown}");
+        assert!(shown.contains("(http://g/o/r/src/commit/abc/pkg/__init__.py#L1)"), "{shown}");
+        assert_eq!(parse_state(body).unwrap().items[0].message, "__proto__ and *bold*");
+    }
+
+    #[test]
+    fn missing_render_version_defaults_to_zero() {
+        let body = format!("{MARK}{{\"key\":\"k\",\"part\":0,\"items\":[]}} -->");
+        assert_eq!(parse_state(&body).unwrap().v, 0);
+        let d = desired(&result(), "http://g", "o/r");
+        assert_eq!(parse_state(&d[0].parts[0].body).unwrap().v, RENDER_VERSION);
     }
 
     #[test]
