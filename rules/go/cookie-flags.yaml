@@ -11,5 +11,6 @@ rules:
       qualgate_id: go.cookie-flags
       qualgate_severity: medium
       qualgate_category: security
+      qualgate_kind: hotspot
       qualgate_mois: SF-12
       cwe: "CWE-614"

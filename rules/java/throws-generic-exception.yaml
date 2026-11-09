@@ -29,5 +29,6 @@ rules:
       qualgate_id: java.throws-generic-exception
       qualgate_severity: low
       qualgate_category: security
+      qualgate_kind: hotspot
       qualgate_mois: EH-03
       cwe: "CWE-397"

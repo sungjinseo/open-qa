@@ -16,5 +16,6 @@ rules:
       qualgate_id: ts.insecure-random
       qualgate_severity: medium
       qualgate_category: security
+      qualgate_kind: hotspot
       qualgate_mois: SF-08
       cwe: "CWE-338"

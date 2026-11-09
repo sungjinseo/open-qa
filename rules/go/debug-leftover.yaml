@@ -11,5 +11,6 @@ rules:
       qualgate_id: go.debug-leftover
       qualgate_severity: low
       qualgate_category: security
+      qualgate_kind: hotspot
       qualgate_mois: EN-02
       cwe: "CWE-489"

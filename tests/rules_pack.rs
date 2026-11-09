@@ -47,6 +47,10 @@ fn every_rule_detects_bad_and_accepts_good() {
         for k in ["qualgate_id", "qualgate_severity", "qualgate_category"] {
             if !yaml.contains(k) { failures.push(format!("{name}: {k} 없음")); }
         }
+        if let Some(k) = yaml.lines().find_map(|l| l.trim().strip_prefix("qualgate_kind:")) {
+            let k = k.trim();
+            if k != "issue" && k != "hotspot" { failures.push(format!("{lang}.{name}: qualgate_kind는 issue 또는 hotspot이어야 함({k})")); }
+        }
         // 행안부 49 기본 규칙 묶음: 보안 규칙은 항목 ID와 메시지 접두어가 있어야 한다. (kotlin은 기존 규칙 유지)
         if lang != "kotlin" && yaml.contains("qualgate_category: security") {
             let mois = yaml.lines().find_map(|l| l.trim().strip_prefix("qualgate_mois:")).map(|v| v.trim().to_string()).unwrap_or_default();

@@ -33,5 +33,6 @@ rules:
       qualgate_id: ts.prototype-pollution
       qualgate_severity: high
       qualgate_category: security
+      qualgate_kind: hotspot
       qualgate_mois: VC-04
       cwe: "CWE-1321"

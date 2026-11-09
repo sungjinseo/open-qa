@@ -15,5 +15,6 @@ rules:
       qualgate_id: ts.cors-wildcard
       qualgate_severity: medium
       qualgate_category: security
+      qualgate_kind: hotspot
       qualgate_mois: VC-03
       cwe: "CWE-942"

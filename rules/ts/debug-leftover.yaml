@@ -13,5 +13,6 @@ rules:
       qualgate_id: ts.debug-leftover
       qualgate_severity: info
       qualgate_category: security
+      qualgate_kind: hotspot
       qualgate_mois: EN-02
       cwe: "CWE-489"

@@ -14,5 +14,6 @@ rules:
       qualgate_id: python.dns-based-decision
       qualgate_severity: low
       qualgate_category: security
+      qualgate_kind: hotspot
       qualgate_mois: AM-01
       cwe: "CWE-350"

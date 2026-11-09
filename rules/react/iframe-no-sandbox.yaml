@@ -12,5 +12,6 @@ rules:
       qualgate_id: react.iframe-no-sandbox
       qualgate_severity: low
       qualgate_category: security
+      qualgate_kind: hotspot
       qualgate_mois: IV-04
       cwe: "CWE-1021"

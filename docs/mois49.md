@@ -83,3 +83,37 @@
 | kotlin | 20 | 0 | 20 |
 
 kotlin은 이번 개편 대상이 아니라 기존 규칙을 그대로 둡니다(행안부 항목 연결 없음).
+
+## 핫스팟 기본
+
+확신도가 낮아 사람이 검토해야 하는 규칙은 `metadata.qualgate_kind: hotspot`으로 표시합니다(없으면 이슈). 아래 규칙이 기본 핫스팟입니다.
+
+- `ts.hardcoded-secret`
+- `go.hardcoded-password`
+- `java.hardcoded-password`
+- `kotlin.hardcoded-password`
+- `python.hardcoded-password`
+- `go.comment-secret`
+- `java.comment-secret`
+- `python.comment-secret`
+- `ts.comment-secret`
+- `python.insecure-random`
+- `ts.insecure-random`
+- `java.random-for-security`
+- `go.math-rand`
+- `go.cookie-flags`
+- `python.cookie-flags`
+- `java.cookie-insecure`
+- `ts.cookie-insecure`
+- `ts.document-cookie-insecure`
+- `ts.cors-wildcard`
+- `react.iframe-no-sandbox`
+- `ts.dns-lookup-decision`
+- `go.dns-based-decision`
+- `java.dns-based-decision`
+- `python.dns-based-decision`
+- `go.debug-leftover`
+- `ts.debug-leftover`
+- `java.catch-throwable`
+- `java.throws-generic-exception`
+- `ts.prototype-pollution`

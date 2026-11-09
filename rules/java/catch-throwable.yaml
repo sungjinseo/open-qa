@@ -21,5 +21,6 @@ rules:
       qualgate_id: java.catch-throwable
       qualgate_severity: low
       qualgate_category: security
+      qualgate_kind: hotspot
       qualgate_mois: EH-03
       cwe: "CWE-396"
