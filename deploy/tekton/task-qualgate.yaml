@@ -1,0 +1,140 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: qualgate
+  namespace: tekton-catalog
+spec:
+  description: Fetch centralized qualgate config, scan source, publish issues and report the quality gate.
+  params:
+    - name: IMAGE
+      type: string
+      default: '{{image_registry}}/nnd/tekton-cicd/qualgate:0.1.0'
+    - name: CONTEXT_DIR
+      type: string
+    - name: GIT_HOST_URL
+      type: string
+      default: '{{gitea_domain}}'
+    - name: REPO_ORG
+      type: string
+    - name: REPO_NAME
+      type: string
+    - name: REVISION
+      type: string
+    - name: COMMIT
+      type: string
+    - name: CONFIG_REPO
+      type: string
+    - name: CONFIG_REF
+      type: string
+      default: main
+    - name: CRT_FILENAME
+      type: string
+      default: ca-certificates.crt
+    - name: SSL_VERIFY
+      type: string
+      default: "true"
+    - name: FAIL_ON_GATE
+      type: string
+      default: "true"
+  workspaces:
+    - name: source
+    - name: basic-auth
+    - name: ssl-ca-directory
+      optional: true
+  results:
+    - name: gate
+      description: Quality gate result, passed or failed.
+  volumes:
+    - name: work
+      emptyDir: {}
+  steps:
+    - name: fetch-config
+      image: $(params.IMAGE)
+      env:
+        - name: GITEA_URL
+          value: $(params.GIT_HOST_URL)
+        - name: QUALGATE_CA_FILE
+          value: ""
+        - name: QUALGATE_GIT_CREDENTIALS
+          value: $(workspaces.basic-auth.path)/.git-credentials
+        - name: QUALGATE_SSL_VERIFY
+          value: $(params.SSL_VERIFY)
+        - name: REPO_ORG
+          value: $(params.REPO_ORG)
+        - name: REPO_NAME
+          value: $(params.REPO_NAME)
+        - name: REVISION
+          value: $(params.REVISION)
+        - name: COMMIT
+          value: $(params.COMMIT)
+        - name: CONFIG_REPO
+          value: $(params.CONFIG_REPO)
+        - name: CONFIG_REF
+          value: $(params.CONFIG_REF)
+        - name: CRT_FILENAME
+          value: $(params.CRT_FILENAME)
+      script: |
+        #!/bin/sh
+        set -eu
+        if [ "$(workspaces.ssl-ca-directory.bound)" = "true" ]; then
+          export QUALGATE_CA_FILE="$(workspaces.ssl-ca-directory.path)/${CRT_FILENAME}"
+        fi
+        exec qualgate fetch-config \
+          --repo "${REPO_ORG}/${REPO_NAME}" \
+          --branch "${REVISION}" \
+          --commit "${COMMIT}" \
+          --config-repo "${CONFIG_REPO}" \
+          --ref "${CONFIG_REF}" \
+          --out /work/config
+      volumeMounts:
+        - name: work
+          mountPath: /work
+    - name: scan
+      image: $(params.IMAGE)
+      args:
+        - scan
+        - --src
+        - $(workspaces.source.path)/$(params.CONTEXT_DIR)
+        - --config
+        - /work/config
+        - --out
+        - /work/out
+      env:
+        - name: QUALGATE_BRANCH
+          value: $(params.REVISION)
+      volumeMounts:
+        - name: work
+          mountPath: /work
+    - name: publish
+      image: $(params.IMAGE)
+      env:
+        - name: GITEA_URL
+          value: $(params.GIT_HOST_URL)
+        - name: QUALGATE_CA_FILE
+          value: ""
+        - name: QUALGATE_GIT_CREDENTIALS
+          value: $(workspaces.basic-auth.path)/.git-credentials
+        - name: QUALGATE_SSL_VERIFY
+          value: $(params.SSL_VERIFY)
+        - name: REPO_ORG
+          value: $(params.REPO_ORG)
+        - name: REPO_NAME
+          value: $(params.REPO_NAME)
+        - name: FAIL_ON_GATE
+          value: $(params.FAIL_ON_GATE)
+        - name: CRT_FILENAME
+          value: $(params.CRT_FILENAME)
+      script: |
+        #!/bin/sh
+        set -eu
+        if [ "$(workspaces.ssl-ca-directory.bound)" = "true" ]; then
+          export QUALGATE_CA_FILE="$(workspaces.ssl-ca-directory.path)/${CRT_FILENAME}"
+        fi
+        exec qualgate publish \
+          --repo "${REPO_ORG}/${REPO_NAME}" \
+          --out /work/out \
+          --gate-result "$(results.gate.path)" \
+          --fail-on-gate "${FAIL_ON_GATE}"
+      volumeMounts:
+        - name: work
+          mountPath: /work

@@ -333,7 +333,7 @@ fn publish_writes_gate_result_and_fail_on_gate_false_returns_zero() {
         .args(["--gate-result"]).arg(&gate_path).args(["--fail-on-gate", "false"])
         .env("GITEA_TOKEN", "t").env("GITEA_URL", &url).output().unwrap();
     assert_eq!(output.status.code(), Some(0), "{}", String::from_utf8_lossy(&output.stderr));
-    assert_eq!(std::fs::read_to_string(gate_path).unwrap(), "{\"schema\":1,\"status\":\"failed\"}");
+    assert_eq!(std::fs::read_to_string(gate_path).unwrap(), "failed");
     assert_eq!(h.join().unwrap(), vec!["GET /api/v1/repos/o/r HTTP/1.1".to_string()]);
 }
 

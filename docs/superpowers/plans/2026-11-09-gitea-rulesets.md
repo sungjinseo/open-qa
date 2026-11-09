@@ -526,23 +526,23 @@ git commit -m "feat(publish): gate evaluation with hotspot review and ruleset ex
 **Interfaces:**
 - Consumes: 스펙 5장의 Task 정의, 파라미터 이름.
 
-- [ ] **Step 1: 실패 테스트** `tests/tekton_yaml.rs`
+- [x] **Step 1: 실패 테스트** `tests/tekton_yaml.rs`
 
 `serde_yaml`로 `deploy/tekton/task-qualgate.yaml`을 읽어: `apiVersion == tekton.dev/v1`, `kind == Task`, `metadata.namespace == tekton-catalog`, 파라미터 이름 집합이 스펙과 같음(`IMAGE, CONTEXT_DIR, GIT_HOST_URL, REPO_ORG, REPO_NAME, REVISION, COMMIT, CONFIG_REPO, CONFIG_REF, CRT_FILENAME, SSL_VERIFY, FAIL_ON_GATE`), workspace `source`, `basic-auth`, `ssl-ca-directory`, 결과 `gate`, 단계 이름 순서 `fetch-config, scan, publish`, `scan` 단계 env에 `GITEA`·`QUALGATE_GIT_CREDENTIALS`·`QUALGATE_CA_FILE`이 없음.
 
-- [ ] **Step 2: Task YAML 작성**
+- [x] **Step 2: Task YAML 작성**
 
 이미지 기본값 `{{image_registry}}/nnd/tekton-cicd/qualgate:<패키지 버전>`, `GIT_HOST_URL` 기본값 `{{gitea_domain}}`. `fetch-config`·`publish` env: `GITEA_URL`, `QUALGATE_CA_FILE=$(workspaces.ssl-ca-directory.path)/$(params.CRT_FILENAME)`, `QUALGATE_GIT_CREDENTIALS=$(workspaces.basic-auth.path)/.git-credentials`, `QUALGATE_SSL_VERIFY=$(params.SSL_VERIFY)`. `ssl-ca-directory` workspace는 `optional: true`이고 바인딩이 없으면 CA 변수를 비운다(스크립트 없이 하려면 단계를 `script`로 작성해 `$(workspaces.ssl-ca-directory.bound)`를 확인). `publish`에 `--fail-on-gate $(params.FAIL_ON_GATE)`(기본 `"true"`). `/work`는 `emptyDir` 볼륨.
 
-- [ ] **Step 3: `pipeline-patch.md`**
+- [x] **Step 3: `pipeline-patch.md`**
 
 `build-common-image-gitops`의 `code-analysis` 태스크를 바꾼 YAML 조각(전체 태스크 블록), 새 파이프라인 파라미터 `qualgate-config-repo`, `qualgate-fail-on-gate`, `failure-issue-skip-tasks`에 `code-analysis` 추가, `SSL_VERIFY`는 `code-fetch`의 `sslVerify`와 같은 값, `COMMIT`은 `$(tasks.code-fetch.results.commit)`. 등록 명령 `kubectl apply -n tekton-catalog -f deploy/tekton/task-qualgate.yaml`.
 
-- [ ] **Step 4: README 갱신**
+- [x] **Step 4: README 갱신**
 
 빠른 시작을 Tekton 기준으로, 설정 저장소 만들기(`init-config` → Gitea에 push → `validate-config`), 명령 목록, 환경 변수, 종료 코드, Tekton 한계(workspace 공유, 같은 Pod 네트워크), 핫스팟과 `qualgate:safe`, 룰셋에서 끈 규칙의 이슈 종료 동작, `.qualgate.toml` 무시. Gitea Actions 언급 제거.
 
-- [ ] **Step 5: 통과 확인과 커밋**
+- [x] **Step 5: 통과 확인과 커밋**
 
 Run: `bash scripts/cargo.sh test --test tekton_yaml`
 

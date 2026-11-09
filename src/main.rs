@@ -66,8 +66,8 @@ fn do_publish(r: &ScanResult, repo: &str, gate_result: Option<&Path>, fail_on_ga
     if !sync_issues { println!("Branch {:?} is not the default branch {default}; issue sync skipped.", r.branch); }
     let outcome = qualgate::sync::publish(&mut api, r, base.trim_end_matches('/'), repo, sync_issues)?;
     if let Some(path) = gate_result {
-        let value = serde_json::json!({"schema": 1, "status": if outcome.gate.passed { "passed" } else { "failed" }});
-        std::fs::write(path, serde_json::to_vec(&value)?).context("gate result write failed")?;
+        let value = if outcome.gate.passed { "passed" } else { "failed" };
+        std::fs::write(path, value).context("gate result write failed")?;
     }
     if let Some(rep) = outcome.report { println!("Issues: created {}, updated {}, closed {}, reopened {}, skipped {}", rep.created, rep.updated, rep.closed, rep.reopened, rep.skipped); }
     if !outcome.gate.conditions.is_empty() && outcome.gate.conditions.iter().all(|c| c.status == qualgate::gatecalc::ConditionStatus::Skipped) { println!("Warning: all gate conditions were skipped because their metrics were not measured."); }
