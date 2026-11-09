@@ -5,6 +5,7 @@ pub mod dup;
 pub mod fsutil;
 pub mod gate;
 pub mod gitea;
+pub mod initcfg;
 pub mod model;
 pub mod newcode;
 pub mod render;

@@ -248,3 +248,95 @@ fn run_on_non_default_branch_skips_sync() {
     assert_eq!(h.join().unwrap(), vec!["GET /api/v1/repos/o/r HTTP/1.1".to_string()]);
     assert!(out.path().join("result.json").exists());
 }
+
+fn fixture_cfg(kind: &str) -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/config").join(kind)
+}
+
+fn rule_count() -> usize {
+    ["java", "kotlin", "python", "react", "vue", "go", "ts"].iter()
+        .map(|d| std::fs::read_dir(rules_dir().join(d)).unwrap().flatten()
+            .filter(|e| e.path().extension().is_some_and(|x| x == "yaml")).count())
+        .sum()
+}
+
+#[test]
+fn init_config_output_passes_validate_config() {
+    let t = tempfile::tempdir().unwrap();
+    let out = t.path().join("cfg");
+    let st = bin().args(["init-config", "--out"]).arg(&out).env("QUALGATE_RULES", rules_dir()).status().unwrap();
+    assert_eq!(st.code(), Some(0));
+    assert!(out.join("README.md").is_file());
+    let st = bin().args(["validate-config", "--config-dir"]).arg(&out).env("QUALGATE_RULES", rules_dir()).status().unwrap();
+    assert_eq!(st.code(), Some(0));
+}
+
+#[test]
+fn init_config_enables_all_dirs_and_default_gate() {
+    let t = tempfile::tempdir().unwrap();
+    let st = bin().args(["init-config", "--out"]).arg(t.path()).env("QUALGATE_RULES", rules_dir()).status().unwrap();
+    assert_eq!(st.code(), Some(0)); // 비어 있는 기존 디렉터리는 허용
+    let g: toml::Value = toml::from_str(&std::fs::read_to_string(t.path().join("qualgate.toml")).unwrap()).unwrap();
+    let name = g["default_ruleset"].as_str().unwrap();
+    assert!(!name.is_empty());
+    let metrics: Vec<(&str, &str, f64)> = g["default_gate"].as_array().unwrap().iter()
+        .map(|c| (c["metric"].as_str().unwrap(), c["op"].as_str().unwrap(),
+                  c["value"].as_float().or(c["value"].as_integer().map(|i| i as f64)).unwrap()))
+        .collect();
+    assert_eq!(metrics, [("new_issues", "gt", 0.0), ("new_hotspots_reviewed", "lt", 100.0), ("new_coverage", "lt", 80.0), ("new_duplicated_lines", "gt", 3.0)]);
+    let r: toml::Value = toml::from_str(&std::fs::read_to_string(t.path().join(format!("rulesets/{name}.toml"))).unwrap()).unwrap();
+    assert_eq!(r["name"].as_str(), Some(name));
+    let langs = r["languages"].as_table().unwrap();
+    assert_eq!(langs.len(), 7);
+    for d in ["java", "kotlin", "python", "react", "vue", "go", "ts"] {
+        assert_eq!(langs[d]["enabled"].as_bool(), Some(true), "{d}");
+    }
+}
+
+#[test]
+fn init_config_refuses_non_empty_dir() {
+    let t = tempfile::tempdir().unwrap();
+    std::fs::write(t.path().join("keep.txt"), "x").unwrap();
+    let o = bin().args(["init-config", "--out"]).arg(t.path()).env("QUALGATE_RULES", rules_dir()).output().unwrap();
+    assert_eq!(o.status.code(), Some(2));
+    assert!(!t.path().join("qualgate.toml").exists());
+    assert_eq!(std::fs::read_to_string(t.path().join("keep.txt")).unwrap(), "x");
+}
+
+#[test]
+fn validate_config_reports_every_error_with_file_path() {
+    let o = bin().args(["validate-config", "--config-dir"]).arg(fixture_cfg("bad/multi")).env("QUALGATE_RULES", rules_dir()).output().unwrap();
+    assert_eq!(o.status.code(), Some(2));
+    let e = String::from_utf8_lossy(&o.stderr);
+    assert!(e.contains("rulesets/backend-standard.toml"), "{e}");
+    assert!(e.contains("projects/team-a/order-service.toml"), "{e}");
+    assert!(e.lines().filter(|l| l.contains(".toml")).count() >= 3, "{e}");
+}
+
+#[test]
+fn validate_config_accepts_good_fixture() {
+    let st = bin().args(["validate-config", "--config-dir"]).arg(fixture_cfg("good")).env("QUALGATE_RULES", rules_dir()).status().unwrap();
+    assert_eq!(st.code(), Some(0));
+}
+
+#[test]
+fn catalog_json_lists_all_rules() {
+    let o = bin().args(["catalog", "--json"]).env("QUALGATE_RULES", rules_dir()).output().unwrap();
+    assert_eq!(o.status.code(), Some(0));
+    let v: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
+    let a = v.as_array().unwrap();
+    assert_eq!(a.len(), rule_count());
+    for it in a {
+        for k in ["id", "dir", "kind"] { assert!(it[k].is_string(), "{it}"); }
+    }
+}
+
+#[test]
+fn wrong_rules_path_exits_2_for_catalog_and_validate() {
+    let t = tempfile::tempdir().unwrap();
+    let o = bin().args(["catalog", "--json"]).env("QUALGATE_RULES", t.path()).output().unwrap();
+    assert_eq!(o.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("QUALGATE_RULES"));
+    let st = bin().args(["validate-config", "--config-dir"]).arg(fixture_cfg("good")).env("QUALGATE_RULES", t.path()).status().unwrap();
+    assert_eq!(st.code(), Some(2));
+}

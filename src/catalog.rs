@@ -48,6 +48,9 @@ impl Catalog {
             files.sort();
             for f in files { v.push(read_rule(dir, &f)?); }
         }
+        if v.is_empty() {
+            bail!("{}에서 규칙 파일(<dir>/*.yaml)을 하나도 찾지 못했습니다. QUALGATE_RULES 경로를 확인하세요", rules_root.display());
+        }
         Ok(Catalog::from_rules(v))
     }
 
@@ -128,7 +131,19 @@ mod tests {
         let t = tempfile::tempdir().unwrap();
         rule(&t.path().join("tests").join("go"), "a", "bogus", "");
         std::fs::write(t.path().join("tests").join("x.yaml"), "not: [valid").unwrap();
-        assert!(Catalog::load(t.path()).unwrap().rules.is_empty());
+        rule(&t.path().join("go"), "a", "go.a", "");
+        let c = Catalog::load(t.path()).unwrap();
+        assert_eq!(c.rules.keys().collect::<Vec<_>>(), ["go.a"]);
+    }
+
+    #[test]
+    fn no_rule_files_is_an_error() {
+        let t = tempfile::tempdir().unwrap();
+        assert!(Catalog::load(t.path()).unwrap_err().to_string().contains("QUALGATE_RULES"));
+        // 규칙 폴더는 있지만 YAML이 없는 경우, 그리고 존재하지 않는 경로도 오류다.
+        std::fs::create_dir_all(t.path().join("go")).unwrap();
+        assert!(Catalog::load(t.path()).is_err());
+        assert!(Catalog::load(&t.path().join("missing")).is_err());
     }
 
     #[test]
