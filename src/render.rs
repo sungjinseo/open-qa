@@ -177,16 +177,11 @@ pub fn desired(r: &ScanResult, base_url: &str, repo: &str) -> Vec<Desired> {
 fn pct(v: Option<f64>) -> String { v.map_or("측정 안 됨".to_string(), |x| format!("{x:.1}%")) }
 
 pub fn summary(r: &ScanResult, skipped: usize) -> (String, String) {
-    let mut b = format!("**게이트:** {}  \n{COMMIT_LINE} `{}`\n\n", if r.gate.passed { "통과" } else { "실패" }, r.commit);
+    // 게이트 판정은 publish가 맡는다(Task 9에서 조건별 결과를 다시 적는다).
+    let mut b = format!("{COMMIT_LINE} `{}`\n\n", r.commit);
     b.push_str(&format!(
-        "| 지표 | 값 |\n|---|---|\n| 전체 커버리지 | {} |\n| 신규 코드 커버리지 | {} |\n| 전체 중복률 | {} |\n| 신규 코드 중복률 | {} |\n| 변경 줄 차단 등급 위반 | {} |\n\n",
-        pct(r.metrics.coverage), pct(r.metrics.new_coverage), pct(r.metrics.duplication), pct(r.metrics.new_duplication),
-        r.metrics.new_blocking.map_or("측정 안 됨".to_string(), |v| format!("{v}건"))));
-    b.push_str("| 조건 | 실제 | 기준 | 결과 |\n|---|---|---|---|\n");
-    for c in &r.gate.conditions {
-        b.push_str(&format!("| {} | {} | {} | {:?} |\n", c.name, c.actual.map_or("측정 안 됨".to_string(), |v| format!("{v:.1}")), c.limit, c.status));
-    }
-    b.push('\n');
+        "| 지표 | 값 |\n|---|---|\n| 전체 커버리지 | {} |\n| 신규 코드 커버리지 | {} |\n| 전체 중복률 | {} |\n| 신규 코드 중복률 | {} |\n\n",
+        pct(r.metrics.coverage), pct(r.metrics.new_coverage), pct(r.metrics.duplication), pct(r.metrics.new_duplication)));
     let list = |title: &str, v: &[String], b: &mut String| {
         if v.is_empty() { return; }
         b.push_str(&format!("**{title} ({}개):** ", v.len()));
@@ -207,14 +202,15 @@ pub fn summary(r: &ScanResult, skipped: usize) -> (String, String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::catalog::Kind;
 
     fn f(rule: &str, file: &str, line: u32, msg: &str, sev: Severity) -> Finding {
-        Finding { rule: rule.into(), file: file.into(), line, line_hash: "h".into(), message: msg.into(), severity: sev, category: "c".into() }
+        Finding { rule: rule.into(), file: file.into(), line, line_hash: "h".into(), message: msg.into(), severity: sev, category: "c".into(), kind: Kind::Issue }
     }
 
     fn result() -> ScanResult {
         ScanResult {
-            schema: 1, commit: "abc".into(), branch: Some("main".into()),
+            schema: SCHEMA, commit: "abc".into(), branch: Some("main".into()),
             findings: vec![
                 f("r1", "a.java", 3, "m --> x", Severity::Low),
                 f("r1", "a.java", 1, "m", Severity::High),
@@ -226,9 +222,10 @@ mod tests {
             ]}],
             metrics: Metrics { coverage: Some(70.5), ..Default::default() },
             coverage_status: CoverageStatus::default(),
-            gate: GateResult { passed: true, conditions: vec![] },
             unanalyzed: vec![],
             publish: PublishConfig { max_new_issues: 20, labels: vec!["qualgate".into()] },
+            active_dirs: vec![], active_rules: vec![], gate_conditions: vec![],
+            config_source: serde_json::Value::Null, new_hotspots: vec![], new_code_measured: false,
         }
     }
 

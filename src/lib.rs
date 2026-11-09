@@ -11,6 +11,7 @@ pub mod newcode;
 pub mod render;
 pub mod rules;
 pub mod scan;
+pub mod select;
 pub mod settings;
 pub mod sync;
 pub mod track;

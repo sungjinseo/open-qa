@@ -1,9 +1,11 @@
+use crate::catalog::Kind;
+use crate::settings::GateCondition;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
 /// `result.json` 형식 버전. `publish`는 다른 버전을 거부한다.
-pub const SCHEMA: u32 = 1;
+pub const SCHEMA: u32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -71,6 +73,7 @@ pub struct Finding {
     pub message: String,
     pub severity: Severity,
     pub category: String,
+    pub kind: Kind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -90,7 +93,6 @@ pub struct Metrics {
     pub new_coverage: Option<f64>,
     pub duplication: Option<f64>,
     pub new_duplication: Option<f64>,
-    pub new_blocking: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -99,21 +101,6 @@ pub struct CoverageStatus {
     pub unresolved: Vec<String>,
     pub not_in_report: Vec<String>,
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ConditionStatus { Passed, Failed, Skipped }
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Condition {
-    pub name: String,
-    pub actual: Option<f64>,
-    pub limit: f64,
-    pub status: ConditionStatus,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct GateResult { pub passed: bool, pub conditions: Vec<Condition> }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PublishConfig { pub max_new_issues: usize, pub labels: Vec<String> }
@@ -127,9 +114,18 @@ pub struct ScanResult {
     pub clones: Vec<CloneGroup>,
     pub metrics: Metrics,
     pub coverage_status: CoverageStatus,
-    pub gate: GateResult,
     pub unanalyzed: Vec<String>,
     pub publish: PublishConfig,
+    /// 실행한 규칙 디렉터리와 규칙 ID. 여기에 없는 규칙의 이슈는 룰셋에서 제외된 것이다.
+    pub active_dirs: Vec<String>,
+    pub active_rules: Vec<String>,
+    /// 설정 저장소의 게이트 조건. `scan`은 판정하지 않는다.
+    pub gate_conditions: Vec<GateCondition>,
+    /// 설정 디렉터리의 `source.json` 내용.
+    pub config_source: serde_json::Value,
+    /// 신규 코드 줄의 핫스팟. 신규 코드를 측정하지 못하면 비어 있다.
+    pub new_hotspots: Vec<Finding>,
+    pub new_code_measured: bool,
 }
 
 #[cfg(test)]

@@ -1,3 +1,4 @@
+use crate::catalog::Kind;
 use crate::model::{line_hash, Finding, Lang, Severity};
 use crate::vue::Sfc;
 use anyhow::{bail, ensure, Context, Result};
@@ -77,6 +78,8 @@ pub fn parse_output(json: &str, disabled: &[String], read_line: &dyn Fn(&str, u3
         res.findings.push(Finding {
             rule, line: r.start.line, line_hash: line_hash(&line_text),
             message: r.extra.message.clone(), severity, category, file,
+            // 카탈로그 종류와 룰셋 오버라이드는 `select::apply_overrides`가 적용한다.
+            kind: Kind::Issue,
         });
     }
     for e in out.errors {
@@ -206,22 +209,6 @@ pub fn run(opts: &RunOpts) -> Result<RulesOutcome> {
     all.unanalyzed.sort();
     all.unanalyzed.dedup();
     Ok(all)
-}
-
-/// `rules.extra_paths`를 검증해 절대 경로로 돌려준다. 저장소 밖을 가리키면 오류다.
-pub fn extra_rule_paths(src: &Path, extra: &[String]) -> Result<Vec<PathBuf>> {
-    let root = src.canonicalize().with_context(|| format!("{} 경로 확인 실패", src.display()))?;
-    let inside = |p: &Path| p.canonicalize().is_ok_and(|c| c.starts_with(&root));
-    extra.iter().map(|rel| {
-        let p = src.join(rel);
-        ensure!(inside(&p), "rules.extra_paths는 저장소 안에 있어야 합니다: {rel}");
-        // 폴더 안의 심볼릭 링크도 저장소 밖으로 나갈 수 있다.
-        for e in walkdir::WalkDir::new(&p) {
-            let e = e.with_context(|| format!("rules.extra_paths 탐색 실패: {rel}"))?;
-            ensure!(!e.path_is_symlink() || inside(e.path()), "rules.extra_paths의 심볼릭 링크가 저장소 밖을 가리킵니다: {rel}");
-        }
-        Ok(p.canonicalize()?)
-    }).collect()
 }
 
 #[cfg(test)]
@@ -496,38 +483,5 @@ mod tests {
         put(d.path(), "Unclosed.vue", "<script>\neval('1')\n");
         let r = run(&opts(d.path(), rule, &[])).unwrap();
         assert_eq!(r.unanalyzed, vec!["Unclosed.vue".to_string()]);
-    }
-
-    #[test]
-    fn extra_paths_must_stay_inside_the_repo() {
-        let d = tempfile::tempdir().unwrap();
-        let outside = tempfile::tempdir().unwrap();
-        put(d.path(), "rules/a.yaml", "rules: []\n");
-        std::fs::write(outside.path().join("o.yaml"), "secret: 1\n").unwrap();
-        assert_eq!(extra_rule_paths(d.path(), &["rules".to_string()]).unwrap(), vec![d.path().canonicalize().unwrap().join("rules")]);
-        for bad in ["../x".to_string(), outside.path().display().to_string(), "missing".to_string()] {
-            assert!(extra_rule_paths(d.path(), &[bad.clone()]).is_err(), "{bad}");
-        }
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn extra_paths_symlink_leaving_the_repo_is_rejected() {
-        use std::os::unix::fs::symlink;
-        let d = tempfile::tempdir().unwrap();
-        let outside = tempfile::tempdir().unwrap();
-        let secret = outside.path().join("o.yaml");
-        std::fs::write(&secret, "secret: 1\n").unwrap();
-        symlink(&secret, d.path().join("direct.yaml")).unwrap();
-        assert!(extra_rule_paths(d.path(), &["direct.yaml".to_string()]).is_err());
-        put(d.path(), "rules/ok.yaml", "rules: []\n");
-        symlink(&secret, d.path().join("rules/leak.yaml")).unwrap();
-        let e = extra_rule_paths(d.path(), &["rules".to_string()]).unwrap_err();
-        assert!(!format!("{e:#}").contains("secret"));
-        // 저장소 안을 가리키는 링크는 허용한다.
-        let d2 = tempfile::tempdir().unwrap();
-        put(d2.path(), "rules/ok.yaml", "rules: []\n");
-        symlink(d2.path().join("rules/ok.yaml"), d2.path().join("rules/alias.yaml")).unwrap();
-        assert!(extra_rule_paths(d2.path(), &["rules".to_string()]).is_ok());
     }
 }

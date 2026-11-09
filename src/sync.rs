@@ -117,6 +117,7 @@ pub fn sync(api: &mut dyn IssueApi, r: &ScanResult, base_url: &str, repo: &str) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::catalog::Kind;
     use crate::model::*;
     use crate::render::parse_state;
 
@@ -144,15 +145,16 @@ mod tests {
     }
 
     fn f(rule: &str, file: &str, line: u32, sev: Severity) -> Finding {
-        Finding { rule: rule.into(), file: file.into(), line, line_hash: format!("h{line}"), message: "m".into(), severity: sev, category: "c".into() }
+        Finding { rule: rule.into(), file: file.into(), line, line_hash: format!("h{line}"), message: "m".into(), severity: sev, category: "c".into(), kind: Kind::Issue }
     }
 
     fn result(findings: Vec<Finding>) -> ScanResult {
         ScanResult {
-            schema: 1, commit: "abc".into(), branch: Some("main".into()), findings, clones: vec![],
-            metrics: Metrics::default(), coverage_status: CoverageStatus::default(),
-            gate: GateResult { passed: true, conditions: vec![] }, unanalyzed: vec![],
+            schema: SCHEMA, commit: "abc".into(), branch: Some("main".into()), findings, clones: vec![],
+            metrics: Metrics::default(), coverage_status: CoverageStatus::default(), unanalyzed: vec![],
             publish: PublishConfig { max_new_issues: 20, labels: vec!["qualgate".into()] },
+            active_dirs: vec![], active_rules: vec![], gate_conditions: vec![],
+            config_source: serde_json::Value::Null, new_hotspots: vec![], new_code_measured: false,
         }
     }
 
@@ -323,7 +325,7 @@ mod tests {
     }
 
     #[test]
-    fn summary_updates_when_metrics_or_gate_change() {
+    fn summary_updates_when_metrics_change() {
         let mut a = Fake::default();
         let r = result(vec![]);
         run(&mut a, &r);
@@ -334,9 +336,6 @@ mod tests {
         assert_eq!(rep.updated, 1);
         assert_eq!(a.calls, 1);
         assert!(by_key(&a, SUMMARY_KEY).body.contains("42.0"));
-        let mut gate = next.clone();
-        gate.gate.passed = false;
-        assert_eq!(run(&mut a, &gate).updated, 1);
     }
 
     #[test]

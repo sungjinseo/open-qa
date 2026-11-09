@@ -1,9 +1,31 @@
 use anyhow::{bail, Context, Result};
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::process::Command;
 
 pub type ChangedLines = BTreeMap<String, BTreeSet<u32>>;
+
+/// `fetch-config`가 얕은 클론을 위해 미리 계산한 신규 코드 범위(`newcode.json`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NewCodeFile { pub base: String, pub head: String, pub files: BTreeMap<String, Vec<u32>> }
+
+impl NewCodeFile {
+    pub fn changed_lines(&self) -> ChangedLines {
+        self.files.iter().map(|(f, l)| (f.clone(), l.iter().copied().collect())).collect()
+    }
+}
+
+/// `newcode.json`을 읽는다. 파일이 없으면 `Ok(None)`.
+pub fn read_newcode_json(path: &Path) -> Result<Option<NewCodeFile>> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e).with_context(|| format!("{} 읽기 실패", path.display())),
+    };
+    serde_json::from_str(&text).map(Some).with_context(|| format!("{} 형식 오류", path.display()))
+}
 
 fn git(src: &Path, args: &[&str]) -> Result<String> {
     let o = Command::new("git").env_remove("GITEA_TOKEN").args(["-c", "safe.directory=*", "-C"]).arg(src).args(args).output().context("git 실행 실패")?;
@@ -217,6 +239,19 @@ mod tests {
         let c = changed(d.path(), 30).unwrap().unwrap();
         assert_eq!(c["b.py"].iter().copied().collect::<Vec<_>>(), vec![21]);
         assert_eq!(c.len(), 1);
+    }
+
+    #[test]
+    fn newcode_json_reads_lines_and_missing_is_none() {
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("newcode.json");
+        assert_eq!(read_newcode_json(&p).unwrap(), None);
+        std::fs::write(&p, r#"{"base":"b","head":"h","files":{"a.py":[3,1]}}"#).unwrap();
+        let n = read_newcode_json(&p).unwrap().unwrap();
+        assert_eq!((n.base.as_str(), n.head.as_str()), ("b", "h"));
+        assert_eq!(n.changed_lines()["a.py"].iter().copied().collect::<Vec<_>>(), vec![1, 3]);
+        std::fs::write(&p, "{").unwrap();
+        assert!(read_newcode_json(&p).is_err());
     }
 
     #[test]

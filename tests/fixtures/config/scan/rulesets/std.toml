@@ -1,0 +1,13 @@
+schema = 1
+name = "std"
+description = "scan test"
+
+[languages.java]
+enabled = true
+
+[languages.python]
+enabled = true
+disabled_rules = ["python.eval"]
+
+[overrides."python.print-call"]
+kind = "hotspot"

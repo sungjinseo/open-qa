@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use qualgate::gitea::{Client, IssueApi};
-use qualgate::model::{ConditionStatus, ScanResult, SCHEMA};
+use qualgate::model::{ScanResult, SCHEMA};
 use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
@@ -10,20 +10,15 @@ struct Cli { #[command(subcommand)] cmd: Cmd }
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// 코드를 스캔해 result.json을 씁니다. 네트워크가 필요 없습니다.
+    /// 설정 디렉터리(fetch-config 출력)의 설정으로 코드를 스캔해 result.json을 씁니다. 네트워크가 필요 없습니다.
     Scan {
         #[arg(long, default_value = "/src")] src: PathBuf,
+        #[arg(long)] config: PathBuf,
         #[arg(long, default_value = "/out")] out: PathBuf,
     },
     /// result.json을 Gitea 이슈에 반영합니다. 코드를 읽지 않습니다.
     Publish {
         #[arg(long)] repo: String,
-        #[arg(long, default_value = "/out")] out: PathBuf,
-    },
-    /// scan과 publish를 차례로 실행합니다.
-    Run {
-        #[arg(long)] repo: String,
-        #[arg(long, default_value = "/src")] src: PathBuf,
         #[arg(long, default_value = "/out")] out: PathBuf,
     },
     /// 설정 저장소 전체(전역, 룰셋, 프로젝트)를 검증합니다. 오류가 있으면 종료 코드 2.
@@ -34,21 +29,21 @@ enum Cmd {
     Catalog { #[arg(long, required = true)] json: bool },
 }
 
-fn do_scan(src: &Path, out: &Path) -> Result<ScanResult> {
+fn rules_root() -> PathBuf { PathBuf::from(std::env::var("QUALGATE_RULES").unwrap_or_else(|_| "/rules".into())) }
+
+fn do_scan(src: &Path, config: &Path, out: &Path) -> Result<()> {
     let file = out.join("result.json");
     if file.exists() { std::fs::remove_file(&file).context("이전 결과 삭제 실패")?; }
-    let rules = std::env::var("QUALGATE_RULES").unwrap_or_else(|_| "/rules".into());
     let og = std::env::var("QUALGATE_OPENGREP").unwrap_or_else(|_| "opengrep".into());
-    let r = qualgate::scan::scan(src, Path::new(&rules), &og)?;
+    let repo = qualgate::scan::source_repo(&qualgate::scan::read_source(config)?)?;
+    let r = qualgate::scan::scan(src, config, &repo, &rules_root(), &og)?;
     std::fs::create_dir_all(out)?;
     std::fs::write(&file, serde_json::to_vec_pretty(&r)?).context("결과 파일 쓰기 실패")?;
-    println!("위반 {}건, 중복 그룹 {}개, 게이트 {}", r.findings.len(), r.clones.len(), if r.gate.passed { "통과" } else { "실패" });
-    if r.gate.conditions.iter().all(|c| c.status == ConditionStatus::Skipped) {
-        println!("경고: 게이트 조건을 하나도 측정하지 못해 모두 건너뛰었습니다. 이 통과는 품질을 판정한 결과가 아닙니다.");
-    }
-    Ok(r)
+    println!("위반 {}건, 중복 그룹 {}개, 실행 규칙 {}개", r.findings.len(), r.clones.len(), r.active_rules.len());
+    Ok(())
 }
 
+/// 게이트 판정은 아직 하지 않는다(Task 6/9). 동기화만 한다.
 fn do_publish(r: &ScanResult, repo: &str) -> Result<()> {
     let base = std::env::var("GITEA_URL").context("GITEA_URL 환경 변수가 필요합니다")?;
     let token = std::env::var("GITEA_TOKEN").context("GITEA_TOKEN 환경 변수가 필요합니다")?;
@@ -71,8 +66,7 @@ fn load_result(out: &Path) -> Result<ScanResult> {
 }
 
 fn load_catalog() -> Result<qualgate::catalog::Catalog> {
-    let rules = std::env::var("QUALGATE_RULES").unwrap_or_else(|_| "/rules".into());
-    qualgate::catalog::Catalog::load(Path::new(&rules))
+    qualgate::catalog::Catalog::load(&rules_root())
 }
 
 fn validate_config(dir: &Path) -> Result<i32> {
@@ -87,13 +81,10 @@ fn validate_config(dir: &Path) -> Result<i32> {
     }
 }
 
-fn gate_code(r: &ScanResult) -> i32 { if r.gate.passed { 0 } else { 1 } }
-
 fn run(cli: Cli) -> Result<i32> {
     match cli.cmd {
-        Cmd::Scan { src, out } => Ok(gate_code(&do_scan(&src, &out)?)),
-        Cmd::Publish { repo, out } => { let r = load_result(&out)?; do_publish(&r, &repo)?; Ok(gate_code(&r)) }
-        Cmd::Run { repo, src, out } => { let r = do_scan(&src, &out)?; do_publish(&r, &repo)?; Ok(gate_code(&r)) }
+        Cmd::Scan { src, config, out } => { do_scan(&src, &config, &out)?; Ok(0) }
+        Cmd::Publish { repo, out } => { let r = load_result(&out)?; do_publish(&r, &repo)?; Ok(0) }
         Cmd::ValidateConfig { config_dir } => validate_config(&config_dir),
         Cmd::InitConfig { out } => {
             qualgate::initcfg::init_config(&out)?;
