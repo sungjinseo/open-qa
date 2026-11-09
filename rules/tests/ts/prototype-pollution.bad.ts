@@ -1,6 +1,8 @@
-export function merge(target: Record<string, any>, src: Record<string, any>) {
-  for (const key in src) {
-    target[key] = src[key];
+import type { Request, Response } from "express";
+export function updateSettings(req: Request, res: Response) {
+  const settings: Record<string, any> = {};
+  for (const key in req.body) {
+    settings[key] = req.body[key];
   }
-  return target;
+  res.json(settings);
 }

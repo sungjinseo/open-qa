@@ -8,7 +8,7 @@ rules:
       - pattern: console.$L(..., $X, ...)
       - metavariable-regex:
           metavariable: $X
-          regex: (?i).*(password|passwd|secret|token|apikey|api_key|service_?role).*
+          regex: (?i)^(?!["'`]).*(password|passwd|secret|token|apikey|api_key|service_?role).*
     metadata:
       qualgate_id: ts.debug-leftover
       qualgate_severity: info

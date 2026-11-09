@@ -11,7 +11,7 @@ rules:
           - pattern: $V = <... Math.random() ...>
       - metavariable-regex:
           metavariable: $V
-          regex: (?i).*(token|secret|password|passwd|otp|nonce|session|apikey|api_key|code|salt|invite|reset).*
+          regex: (?i)^(.*[_a-z])?(token|secret|password|passwd|otp|nonce|session|apikey|api_key|(verification|auth|confirm|reset|invite|sms|pin)_?code|salt|invite|reset)([_A-Z0-9].*)?$
     metadata:
       qualgate_id: ts.insecure-random
       qualgate_severity: medium

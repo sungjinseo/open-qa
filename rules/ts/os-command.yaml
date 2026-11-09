@@ -9,9 +9,27 @@ rules:
           - pattern-either:
               - pattern: $CP.exec($CMD, ...)
               - pattern: $CP.execSync($CMD, ...)
+          - metavariable-regex:
+              metavariable: $CP
+              regex: ^(child_process|childProcess|cp|proc)$
+          - pattern-not: $CP.$F("...", ...)
+      - patterns:
+          - pattern-either:
               - pattern: exec($CMD, ...)
               - pattern: execSync($CMD, ...)
-          - pattern-not: $CP.$F("...", ...)
+          - pattern-either:
+              - pattern-inside: |
+                  import {..., exec, ...} from "child_process";
+                  ...
+              - pattern-inside: |
+                  import {..., execSync, ...} from "child_process";
+                  ...
+              - pattern-inside: |
+                  const {..., exec, ...} = require("child_process");
+                  ...
+              - pattern-inside: |
+                  const {..., execSync, ...} = require("child_process");
+                  ...
           - pattern-not: $F("...", ...)
       - pattern: '$CP.spawn($CMD, $ARGS, {..., shell: true, ...})'
     metadata:

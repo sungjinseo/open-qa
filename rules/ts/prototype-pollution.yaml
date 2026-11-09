@@ -2,8 +2,13 @@ rules:
   - id: ts.prototype-pollution
     languages: [javascript, typescript]
     severity: ERROR
-    message: "[행안부 확장 VC-04 프로토타입 오염] 외부 객체의 키를 그대로 대상 객체에 복사합니다. __proto__ 키가 들어오면 모든 객체의 프로토타입이 오염됩니다. __proto__·constructor·prototype 키를 걸러내거나 Object.create(null)·Map을 쓰세요."
-    pattern-either:
+    message: "[행안부 확장 VC-04 프로토타입 오염] 요청에서 온 객체의 키를 그대로 대상 객체에 복사하거나 병합합니다. __proto__ 키가 들어오면 모든 객체의 프로토타입이 오염됩니다. __proto__·constructor·prototype 키를 걸러내거나 Object.create(null)·Map을 쓰세요."
+    mode: taint
+    pattern-sources:
+      - pattern: $REQ.body
+      - pattern: $REQ.query
+      - pattern: await $REQ.json()
+    pattern-sinks:
       - patterns:
           - pattern: |
               for ($K in $SRC) {
@@ -17,8 +22,13 @@ rules:
                 if ($COND) { ... }
                 ...
               }
-      - pattern: $L.merge($T, $REQ.body)
-      - pattern: $L.defaultsDeep($T, $REQ.body)
+          - focus-metavariable: $SRC
+      - patterns:
+          - pattern-either:
+              - pattern: $L.merge($T, $S)
+              - pattern: $L.defaultsDeep($T, $S)
+              - pattern: $L.set($T, $S, $V)
+          - focus-metavariable: $S
     metadata:
       qualgate_id: ts.prototype-pollution
       qualgate_severity: high

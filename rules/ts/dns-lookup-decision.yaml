@@ -4,8 +4,9 @@ rules:
     severity: INFO
     message: "[행안부 AM-01 DNS lookup에 의존한 보안결정] 역방향 DNS 조회 결과를 보안 판단에 씁니다. DNS 응답은 위조될 수 있어 접근 통제 근거가 될 수 없습니다. IP 주소 자체나 인증서·토큰으로 판단하세요."
     pattern-either:
-      - pattern: $DNS.reverse(...)
-      - pattern: $DNS.promises.reverse(...)
+      - pattern: dns.reverse(...)
+      - pattern: dns.promises.reverse(...)
+      - pattern: dnsPromises.reverse(...)
     metadata:
       qualgate_id: ts.dns-lookup-decision
       qualgate_severity: low
