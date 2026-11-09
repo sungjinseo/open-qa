@@ -311,9 +311,29 @@ fn publish_on_non_default_branch_skips_sync() {
     let (url, h) = stub_gitea("release");
     let o = bin().args(["publish", "--repo", "o/r", "--out"]).arg(out.path())
         .env("GITEA_TOKEN", "t").env("GITEA_URL", &url).output().unwrap();
-    // 게이트 판정은 Task 9에서 들어온다. 지금은 동기화 여부만 정하고 종료 코드 0이다.
-    assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
-    assert!(String::from_utf8_lossy(&o.stdout).contains("기본 브랜치 release가 아니어서"));
+    // Gate evaluation applies even when issue sync is skipped for a non-default branch.
+    assert_eq!(o.status.code(), Some(1), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(String::from_utf8_lossy(&o.stdout).contains("issue sync skipped"));
+    assert_eq!(h.join().unwrap(), vec!["GET /api/v1/repos/o/r HTTP/1.1".to_string()]);
+}
+
+#[test]
+fn publish_writes_gate_result_and_fail_on_gate_false_returns_zero() {
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let (_src, out) = scanned_out();
+    let result_path = out.path().join("result.json");
+    let mut value: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&result_path).unwrap()).unwrap();
+    value["branch"] = "feature".into();
+    value["metrics"]["new_issues"] = 1.into();
+    value["gate_conditions"] = serde_json::json!([{"metric":"new_issues","op":"gt","value":0.0}]);
+    std::fs::write(&result_path, value.to_string()).unwrap();
+    let gate_path = out.path().join("gate-result.json");
+    let (url, h) = stub_gitea("main");
+    let output = bin().args(["publish", "--repo", "o/r", "--out"]).arg(out.path())
+        .args(["--gate-result"]).arg(&gate_path).args(["--fail-on-gate", "false"])
+        .env("GITEA_TOKEN", "t").env("GITEA_URL", &url).output().unwrap();
+    assert_eq!(output.status.code(), Some(0), "{}", String::from_utf8_lossy(&output.stderr));
+    assert_eq!(std::fs::read_to_string(gate_path).unwrap(), "{\"schema\":1,\"status\":\"failed\"}");
     assert_eq!(h.join().unwrap(), vec!["GET /api/v1/repos/o/r HTTP/1.1".to_string()]);
 }
 

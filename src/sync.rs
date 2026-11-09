@@ -1,4 +1,5 @@
 use crate::gitea::{Issue, IssueApi};
+use crate::gatecalc::{self, GateResult};
 use crate::model::ScanResult;
 use crate::render::{self, parse_issue_state, IssueState, RENDER_VERSION, SUMMARY_KEY};
 use crate::track::track;
@@ -8,6 +9,10 @@ use std::collections::BTreeMap;
 pub const IGNORED_LABEL: &str = "qualgate:ignored";
 /// 항상 붙이고 이슈를 찾을 때 유일하게 쓰는 라벨. 설정의 라벨을 바꿔도 이슈를 잃지 않는다.
 pub const BASE_LABEL: &str = "qualgate";
+pub const SAFE_LABEL: &str = "qualgate:safe";
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PublishOutcome { pub gate: GateResult, pub report: Option<SyncReport> }
 
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub struct SyncReport { pub created: usize, pub updated: usize, pub closed: usize, pub reopened: usize, pub skipped: usize }
@@ -42,17 +47,17 @@ fn close(api: &mut dyn IssueApi, e: &Existing, why: &str, rep: &mut SyncReport) 
     Ok(())
 }
 
-pub fn sync(api: &mut dyn IssueApi, r: &ScanResult, base_url: &str, repo: &str) -> Result<SyncReport> {
+fn sync_with_gate(api: &mut dyn IssueApi, r: &ScanResult, base_url: &str, repo: &str, gate: &GateResult, issues: Vec<Issue>) -> Result<SyncReport> {
     let mut labels = vec![BASE_LABEL.to_string()];
     for l in &r.publish.labels {
         if !labels.contains(l) { labels.push(l.clone()); }
     }
     let labels = &labels;
-    for l in labels { api.ensure_label(l)?; }
+    for l in labels.iter().filter(|l| l.as_str() != BASE_LABEL) { api.ensure_label(l)?; }
     api.ensure_label(IGNORED_LABEL)?;
 
     let mut existing: BTreeMap<String, Vec<Existing>> = BTreeMap::new();
-    for issue in api.list_issues(BASE_LABEL)? {
+    for issue in issues {
         // 상태 주석이 없는 이슈는 사람이 만든 것이므로 건드리지 않는다.
         let Some(state) = parse_issue_state(&issue.title, &issue.body) else { continue };
         existing.entry(state.key.clone()).or_default().push(Existing { issue, state });
@@ -67,6 +72,8 @@ pub fn sync(api: &mut dyn IssueApi, r: &ScanResult, base_url: &str, repo: &str) 
     for d in &desired {
         let cur = existing.remove(&d.key).unwrap_or_default();
         if cur.iter().any(is_ignored) { continue; }
+        // A reviewed hotspot issue is owned by the reviewer until its finding disappears.
+        if cur.iter().any(|e| e.issue.labels.iter().any(|l| l == SAFE_LABEL)) { continue; }
         if cur.is_empty() {
             if created_groups >= r.publish.max_new_issues { rep.skipped += 1; continue; }
             created_groups += 1;
@@ -93,14 +100,20 @@ pub fn sync(api: &mut dyn IssueApi, r: &ScanResult, base_url: &str, repo: &str) 
     for group in existing.values() {
         let blocked = group.iter().flat_map(|e| e.state.items.iter()).any(|i| r.unanalyzed.contains(&i.file));
         if blocked || group.iter().any(is_ignored) { continue; }
+        let excluded = group.iter().flat_map(|e| e.state.items.iter()).all(|i| !r.active_rules.contains(&i.rule));
         for e in group.iter().filter(|e| e.issue.open) {
-            close(api, e, &format!("커밋 `{}`에서 더 이상 발견되지 않아 이슈를 닫습니다.", r.commit), &mut rep)?;
+            let reason = if excluded {
+                format!("커밋 `{}`에서 사용 중인 룰셋에서 제외되어 이슈를 닫습니다.", r.commit)
+            } else {
+                format!("커밋 `{}`에서 더 이상 발견되지 않아 이슈를 닫습니다.", r.commit)
+            };
+            close(api, e, &reason, &mut rep)?;
         }
     }
 
     let summary_ignored = summary_existing.as_ref().is_some_and(|v| v.iter().any(is_ignored));
     if !summary_ignored {
-        let (title, body) = render::summary(r, rep.skipped);
+        let (title, body) = render::summary(r, rep.skipped, gate);
         match summary_existing.as_ref().and_then(|v| v.first()) {
             Some(e) if e.issue.title == title && render::same_except_commit(&e.issue.body, &body) && e.issue.open => {}
             Some(e) => { api.edit_issue(e.issue.number, &title, &body, true)?; rep.updated += 1; }
@@ -112,6 +125,36 @@ pub fn sync(api: &mut dyn IssueApi, r: &ScanResult, base_url: &str, repo: &str) 
         }
     }
     Ok(rep)
+}
+
+/// Publishes issue state and evaluates configured quality gates. A safe label marks
+/// currently matching hotspot items as reviewed; it never changes their issue body.
+pub fn publish(api: &mut dyn IssueApi, r: &ScanResult, base_url: &str, repo: &str, sync_issues: bool) -> Result<PublishOutcome> {
+    if !sync_issues {
+        let gate = gatecalc::evaluate(&r.gate_conditions, &r.metrics, None, r.coverage_required_missing);
+        return Ok(PublishOutcome { gate, report: None });
+    }
+
+    api.ensure_label(BASE_LABEL)?;
+    let issues = api.list_issues(BASE_LABEL)?;
+    let mut reviewed = std::collections::BTreeSet::new();
+    let hotspot_items: Vec<_> = r.new_hotspots.iter().map(render::item_of).collect();
+    for issue in &issues {
+        if !issue.labels.iter().any(|l| l == SAFE_LABEL) { continue; }
+        let Some(state) = parse_issue_state(&issue.title, &issue.body) else { continue };
+        if !r.new_hotspots.iter().any(|f| render::rule_key(&f.rule, &f.file) == state.key) { continue; }
+        for (current, _) in track(&hotspot_items, &state.items).matched {
+            reviewed.insert(current);
+        }
+    }
+    let pct = r.metrics.new_hotspots.map(|n| gatecalc::hotspots_reviewed_pct(n, (reviewed.len() as u64).min(n)));
+    let gate = gatecalc::evaluate(&r.gate_conditions, &r.metrics, pct, r.coverage_required_missing);
+    let report = sync_with_gate(api, r, base_url, repo, &gate, issues)?;
+    Ok(PublishOutcome { gate, report: Some(report) })
+}
+
+pub fn sync(api: &mut dyn IssueApi, r: &ScanResult, base_url: &str, repo: &str) -> Result<SyncReport> {
+    Ok(publish(api, r, base_url, repo, true)?.report.unwrap_or_default())
 }
 
 #[cfg(test)]
@@ -153,7 +196,7 @@ mod tests {
             schema: SCHEMA, commit: "abc".into(), branch: Some("main".into()), findings, clones: vec![],
             metrics: Metrics::default(), coverage_status: CoverageStatus::default(), unanalyzed: vec![],
             publish: PublishConfig { max_new_issues: 20, labels: vec!["qualgate".into()] },
-            active_dirs: vec![], active_rules: vec![], gate_conditions: vec![],
+            active_dirs: vec![], active_rules: vec!["r".into()], gate_conditions: vec![],
             config_source: serde_json::Value::Null, new_hotspots: vec![], new_code_measured: false, coverage_required_missing: false,
         }
     }
@@ -174,6 +217,61 @@ mod tests {
         assert!(by_key(&a, K).open);
         assert!(by_key(&a, SUMMARY_KEY).open);
         assert!(a.labels.contains(&IGNORED_LABEL.to_string()));
+    }
+
+    #[test]
+    fn safe_hotspot_counts_as_reviewed_and_is_not_rewritten() {
+        use crate::settings::{GateCondition, Metric, Op};
+        let mut api = Fake::default();
+        let mut r = result(vec![f("h", "a.py", 1, Severity::Low), f("h", "b.py", 2, Severity::Low)]);
+        for finding in &mut r.findings { finding.kind = Kind::Hotspot; }
+        r.new_hotspots = r.findings.clone();
+        r.metrics.new_hotspots = Some(2);
+        r.gate_conditions = vec![GateCondition { metric: Metric::NewHotspotsReviewed, op: Op::Lt, value: 100.0 }];
+        let first = publish(&mut api, &r, "http://g", "o/r", true).unwrap();
+        assert!(!first.gate.passed);
+        let safe_no = api.issues.iter().find(|i| i.title.contains("a.py")).unwrap().number;
+        let safe_before = api.issues.iter_mut().find(|i| i.number == safe_no).unwrap();
+        safe_before.labels.push(SAFE_LABEL.into());
+        let body_before = safe_before.body.clone();
+        api.calls = 0;
+        let outcome = publish(&mut api, &r, "http://g", "o/r", true).unwrap();
+        assert!(!outcome.gate.passed);
+        assert_eq!(outcome.gate.conditions[0].actual, Some(50.0));
+        let safe_after = api.issues.iter().find(|i| i.number == safe_no).unwrap();
+        assert_eq!(safe_after.body, body_before);
+        assert!(safe_after.open);
+        assert!(api.issues.iter().find(|i| parse_state(&i.body).is_some_and(|s| s.key == SUMMARY_KEY)).unwrap().body.contains("게이트:** 실패"));
+        api.issues.iter_mut().find(|i| i.title.contains("b.py")).unwrap().labels.push(SAFE_LABEL.into());
+        let outcome = publish(&mut api, &r, "http://g", "o/r", true).unwrap();
+        assert!(outcome.gate.passed);
+        assert_eq!(outcome.gate.conditions[0].actual, Some(100.0));
+    }
+
+    #[test]
+    fn inactive_rule_issue_closes_as_ruleset_excluded() {
+        let mut api = Fake::default();
+        run(&mut api, &result(vec![f("r", "a.java", 1, Severity::High)]));
+        let mut r = result(vec![]);
+        r.active_rules.clear();
+        run(&mut api, &r);
+        let issue = by_key(&api, K);
+        assert!(!issue.open);
+        assert!(api.comments.iter().any(|(_, c)| c.contains("룰셋에서 제외")));
+    }
+
+    #[test]
+    fn sync_disabled_makes_no_api_calls_but_evaluates_gate() {
+        use crate::settings::{GateCondition, Metric, Op};
+        let mut api = Fake::default();
+        let mut r = result(vec![]);
+        r.metrics.new_issues = Some(1);
+        r.gate_conditions = vec![GateCondition { metric: Metric::NewIssues, op: Op::Gt, value: 0.0 }];
+        let outcome = publish(&mut api, &r, "http://g", "o/r", false).unwrap();
+        assert!(!outcome.gate.passed);
+        assert!(outcome.report.is_none());
+        assert_eq!(api.calls, 0);
+        assert!(api.listed.is_empty());
     }
 
     #[test]

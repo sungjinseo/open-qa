@@ -486,7 +486,7 @@ pub fn publish(api: &mut dyn IssueApi, r: &ScanResult, base_url: &str, repo: &st
 
 CLI: `qualgate publish --repo <o/r> --out <dir> [--gate-result <file>] [--fail-on-gate true|false]`(기본 true). 게이트 결과 파일에 `passed` 또는 `failed`(줄바꿈 없음). 종료 코드: 통과 0, 실패 1(`--fail-on-gate false`면 0), 오류 2.
 
-- [ ] **Step 1: 실패 테스트** (`sync.rs`, 기존 가짜 API 확장)
+- [x] **Step 1: 실패 테스트** (`sync.rs`, 기존 가짜 API 확장)
 
 1. 핫스팟 위반의 이슈 제목은 `[qualgate] 핫스팟 <규칙>: <파일> (N건)`, 본문에 `qualgate:safe` 안내 문구.
 2. 신규 핫스팟 2건 중 1건이 `qualgate:safe` 이슈의 항목과 지문(트래커)으로 일치 → 검토율 50%, `new_hotspots_reviewed lt 100` → 실패.
@@ -498,17 +498,17 @@ CLI: `qualgate publish --repo <o/r> --out <dir> [--gate-result <file>] [--fail-o
 8. 요약 이슈 본문에 조건별 실제값·기준·결과, `config_source`의 설정 저장소와 커밋 sha, 사용한 룰셋 이름.
 9. 게이트 조건이 모두 Skipped면 stdout 경고(기존 문구 유지).
 
-- [ ] **Step 2~4: 실패 확인, 구현, 통과**
+- [x] **Step 2~4: 실패 확인, 구현, 통과**
 
 `main.rs`의 `do_publish`: 기본 브랜치 확인 후 `sync_issues` 결정, 결과 파일 쓰기, 종료 코드. `render::RENDER_VERSION`을 올려 기존 이슈 본문을 한 번 다시 쓰게 한다.
 
 Run: `bash scripts/cargo.sh test --lib sync` 와 `--test cli`
 
-- [ ] **Step 5: CLI 테스트**
+- [x] **Step 5: CLI 테스트**
 
 기존 스텁 서버 기반 CLI 테스트를 고친다: `--gate-result` 파일 내용, `--fail-on-gate false`면 실패여도 0, 결과 `schema` 1이면 2.
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git commit -m "feat(publish): gate evaluation with hotspot review and ruleset exclusion"

@@ -32,6 +32,8 @@ enum Cmd {
     Publish {
         #[arg(long)] repo: String,
         #[arg(long, default_value = "/out")] out: PathBuf,
+        #[arg(long)] gate_result: Option<PathBuf>,
+        #[arg(long, default_value_t = true, action = clap::ArgAction::Set)] fail_on_gate: bool,
     },
     /// 설정 저장소 전체(전역, 룰셋, 프로젝트)를 검증합니다. 오류가 있으면 종료 코드 2.
     ValidateConfig { #[arg(long)] config_dir: PathBuf },
@@ -55,19 +57,21 @@ fn do_scan(src: &Path, config: &Path, out: &Path) -> Result<()> {
     Ok(())
 }
 
-/// 게이트 판정은 아직 하지 않는다(Task 6/9). 동기화만 한다.
-fn do_publish(r: &ScanResult, repo: &str) -> Result<()> {
+fn do_publish(r: &ScanResult, repo: &str, gate_result: Option<&Path>, fail_on_gate: bool) -> Result<i32> {
     let base = std::env::var("GITEA_URL").context("GITEA_URL 환경 변수가 필요합니다")?;
     let auth = qualgate::httpcfg::resolve_auth(&base)?;
     let mut api = Client::new(&base, repo, auth, qualgate::httpcfg::agent()?);
     let default = api.default_branch()?;
-    if r.branch.as_deref() != Some(default.as_str()) {
-        println!("브랜치 {:?}는 기본 브랜치 {default}가 아니어서 이슈를 동기화하지 않습니다.", r.branch);
-        return Ok(());
+    let sync_issues = r.branch.as_deref() == Some(default.as_str());
+    if !sync_issues { println!("Branch {:?} is not the default branch {default}; issue sync skipped.", r.branch); }
+    let outcome = qualgate::sync::publish(&mut api, r, base.trim_end_matches('/'), repo, sync_issues)?;
+    if let Some(path) = gate_result {
+        let value = serde_json::json!({"schema": 1, "status": if outcome.gate.passed { "passed" } else { "failed" }});
+        std::fs::write(path, serde_json::to_vec(&value)?).context("gate result write failed")?;
     }
-    let rep = qualgate::sync::sync(&mut api, r, base.trim_end_matches('/'), repo)?;
-    println!("이슈 생성 {}, 갱신 {}, 종료 {}, 재오픈 {}, 제한으로 보류 {}", rep.created, rep.updated, rep.closed, rep.reopened, rep.skipped);
-    Ok(())
+    if let Some(rep) = outcome.report { println!("Issues: created {}, updated {}, closed {}, reopened {}, skipped {}", rep.created, rep.updated, rep.closed, rep.reopened, rep.skipped); }
+    if !outcome.gate.conditions.is_empty() && outcome.gate.conditions.iter().all(|c| c.status == qualgate::gatecalc::ConditionStatus::Skipped) { println!("Warning: all gate conditions were skipped because their metrics were not measured."); }
+    Ok(if !outcome.gate.passed && fail_on_gate { 1 } else { 0 })
 }
 
 fn load_result(out: &Path) -> Result<ScanResult> {
@@ -146,7 +150,7 @@ fn run(cli: Cli) -> Result<i32> {
             Ok(0)
         }
         Cmd::Scan { src, config, out } => { do_scan(&src, &config, &out)?; Ok(0) }
-        Cmd::Publish { repo, out } => { let r = load_result(&out)?; do_publish(&r, &repo)?; Ok(0) }
+        Cmd::Publish { repo, out, gate_result, fail_on_gate } => { let r = load_result(&out)?; do_publish(&r, &repo, gate_result.as_deref(), fail_on_gate) }
         Cmd::ValidateConfig { config_dir } => validate_config(&config_dir),
         Cmd::InitConfig { out } => {
             qualgate::initcfg::init_config(&out)?;

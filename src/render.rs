@@ -1,4 +1,6 @@
+use crate::gatecalc::{ConditionStatus, GateResult};
 use crate::model::*;
+use crate::settings::{Metric, Op};
 use crate::track::Item;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -10,7 +12,10 @@ const TITLE_PREFIX: &str = "[qualgate]";
 const COMMIT_LINE: &str = "**커밋:**";
 
 /// 렌더러가 바뀌어 본문 형식이 달라질 때 올린다. 저장된 값과 다르면 이슈 본문을 한 번 다시 쓴다.
-pub const RENDER_VERSION: u32 = 1;
+pub const RENDER_VERSION: u32 = 2;
+
+/// 핫스팟 이슈 본문의 검토 안내. 라벨 이름은 `sync::SAFE_LABEL`과 같다.
+pub const HOTSPOT_GUIDE: &str = "이 항목은 보안 핫스팟입니다. 코드를 검토해 안전하다고 판단되면 이 이슈에 `qualgate:safe` 라벨을 붙이세요. 라벨이 붙은 이슈의 항목은 검토된 것으로 보고 게이트의 신규 핫스팟 검토율에 반영합니다. 라벨을 붙인 이슈는 다시 열거나 갱신하지 않고, 코드가 사라지면 닫습니다.";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IssueState {
@@ -124,24 +129,41 @@ fn finish_parts(key: &str, title: &str, chunks: Vec<Vec<Item>>, table: impl Fn(&
     }).collect()
 }
 
+/// 위반의 추적 항목.
+pub fn item_of(f: &Finding) -> Item {
+    Item { rule: f.rule.clone(), file: f.file.clone(), line: f.line, line_hash: f.line_hash.clone(), message: f.message.clone() }
+}
+
+/// 위반 그룹(규칙·파일)의 이슈 키.
+pub fn rule_key(rule: &str, file: &str) -> String { format!("rule:{rule}:{file}") }
+
 pub fn desired(r: &ScanResult, base_url: &str, repo: &str) -> Vec<Desired> {
+    desired_filtered(r, base_url, repo, &mut |_, items| items)
+}
+
+/// `keep(키, 그룹의 모든 항목)`이 돌려준 항목만으로 이슈를 만든다. 남은 항목이 없으면 그 그룹은 빠진다.
+pub fn desired_filtered(r: &ScanResult, base_url: &str, repo: &str, keep: &mut dyn FnMut(&str, Vec<Item>) -> Vec<Item>) -> Vec<Desired> {
     let link = |file: &str, line: u32| format!("{base_url}/{repo}/src/commit/{}/{}#L{line}", r.commit, encode_path(file));
     let mut out = vec![];
     let mut groups: BTreeMap<(String, String), Vec<&Finding>> = BTreeMap::new();
     for f in &r.findings { groups.entry((f.rule.clone(), f.file.clone())).or_default().push(f); }
     for ((rule, file), mut fs) in groups {
         fs.sort_by_key(|f| f.line);
-        let key = format!("rule:{rule}:{file}");
-        let title = format!("[qualgate] {rule}: {file} ({}건)", fs.len());
+        let key = rule_key(&rule, &file);
+        let items = keep(&key, fs.iter().map(|f| item_of(f)).collect());
+        if items.is_empty() { continue; }
+        let hotspot = fs[0].kind == crate::catalog::Kind::Hotspot;
+        let title = if hotspot {
+            format!("[qualgate] 핫스팟 {rule}: {file} ({}건)", items.len())
+        } else {
+            format!("[qualgate] {rule}: {file} ({}건)", items.len())
+        };
         let severity = fs.iter().map(|f| f.severity).max().unwrap_or(Severity::Info);
         let message = fs[0].message.clone();
         let category = fs[0].category.clone();
-        let items: Vec<Item> = fs.iter().map(|f| Item {
-            rule: f.rule.clone(), file: f.file.clone(), line: f.line,
-            line_hash: f.line_hash.clone(), message: f.message.clone(),
-        }).collect();
         let table = |items: &[Item]| {
-            let mut b = format!("**규칙:** {}  \n**심각도:** {severity:?}  \n**분류:** {}\n\n{}\n\n| 위치 | 내용 |\n|---|---|\n", esc(&rule), esc(&category), cell(&message));
+            let mut b = if hotspot { format!("{HOTSPOT_GUIDE}\n\n") } else { String::new() };
+            b.push_str(&format!("**규칙:** {}  \n**심각도:** {severity:?}  \n**분류:** {}\n\n{}\n\n| 위치 | 내용 |\n|---|---|\n", esc(&rule), esc(&category), cell(&message)));
             for it in items.iter().take(50) {
                 b.push_str(&format!("| [{}:{}]({}) | {} |\n", esc(&it.file), it.line, link(&it.file, it.line), cell(&it.message)));
             }
@@ -156,10 +178,11 @@ pub fn desired(r: &ScanResult, base_url: &str, repo: &str) -> Vec<Desired> {
         let files: std::collections::BTreeSet<&str> = g.parts.iter().map(|p| p.file.as_str()).collect();
         let first = files.iter().next().copied().unwrap_or("");
         let title = format!("[qualgate] 중복 코드: {first} 외 {}개 파일 ({}줄)", files.len().saturating_sub(1), g.lines);
-        let items: Vec<Item> = g.parts.iter().map(|p| Item {
+        let items = keep(&key, g.parts.iter().map(|p| Item {
             rule: "duplication".into(), file: p.file.clone(), line: p.start_line,
             line_hash: g.key.clone(), message: format!("{}-{}", p.start_line, p.end_line),
-        }).collect();
+        }).collect());
+        if items.is_empty() { continue; }
         let table = |items: &[Item]| {
             let mut b = String::from("같은 코드가 여러 위치에 있습니다. 공통 코드로 추출하세요.\n\n| 위치 | 줄 |\n|---|---|\n");
             for it in items.iter().take(50) {
@@ -176,9 +199,31 @@ pub fn desired(r: &ScanResult, base_url: &str, repo: &str) -> Vec<Desired> {
 
 fn pct(v: Option<f64>) -> String { v.map_or("측정 안 됨".to_string(), |x| format!("{x:.1}%")) }
 
-pub fn summary(r: &ScanResult, skipped: usize) -> (String, String) {
-    // 게이트 판정은 publish가 맡는다(Task 9에서 조건별 결과를 다시 적는다).
-    let mut b = format!("{COMMIT_LINE} `{}`\n\n", r.commit);
+fn is_count(m: Metric) -> bool { matches!(m, Metric::NewIssues | Metric::Issues) }
+
+fn metric_value(m: Metric, v: f64) -> String { if is_count(m) { format!("{v:.0}건") } else { format!("{v:.1}%") } }
+
+/// 설정 출처(`source.json` 내용과 룰셋 이름)의 문자열 값. 없으면 "알 수 없음".
+fn source_field(r: &ScanResult, key: &str) -> String {
+    r.config_source.get(key).and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map_or("알 수 없음".to_string(), esc)
+}
+
+pub fn summary(r: &ScanResult, skipped: usize, gate: &GateResult) -> (String, String) {
+    let mut b = format!("**게이트:** {}  \n{COMMIT_LINE} `{}`\n\n", if gate.passed { "통과" } else { "실패" }, r.commit);
+    b.push_str(&format!("**설정:** 저장소 {} (ref {}), 커밋 {}  \n**룰셋:** {}\n\n",
+        source_field(r, "config_repo"), source_field(r, "ref"), source_field(r, "config_commit"), source_field(r, "ruleset")));
+    if gate.conditions.is_empty() {
+        b.push_str("게이트 조건이 없어 항상 통과합니다.\n\n");
+    } else {
+        b.push_str("| 조건 | 실제 | 기준(실패) | 결과 |\n|---|---|---|---|\n");
+        for c in &gate.conditions {
+            let op = match c.op { Op::Gt => "초과", Op::Lt => "미만" };
+            let status = match c.status { ConditionStatus::Passed => "통과", ConditionStatus::Failed => "실패", ConditionStatus::Skipped => "건너뜀" };
+            b.push_str(&format!("| {} | {} | {} {} | {status} |\n", c.metric.as_str(),
+                c.actual.map_or("측정 안 됨".to_string(), |v| metric_value(c.metric, v)), metric_value(c.metric, c.value), op));
+        }
+        b.push('\n');
+    }
     b.push_str(&format!(
         "| 지표 | 값 |\n|---|---|\n| 전체 커버리지 | {} |\n| 신규 코드 커버리지 | {} |\n| 전체 중복률 | {} |\n| 신규 코드 중복률 | {} |\n\n",
         pct(r.metrics.coverage), pct(r.metrics.new_coverage), pct(r.metrics.duplicated_lines), pct(r.metrics.new_duplicated_lines)));
@@ -227,6 +272,54 @@ mod tests {
             active_dirs: vec![], active_rules: vec![], gate_conditions: vec![],
             config_source: serde_json::Value::Null, new_hotspots: vec![], new_code_measured: false, coverage_required_missing: false,
         }
+    }
+
+    fn pass() -> GateResult { GateResult { passed: true, conditions: vec![] } }
+
+    #[test]
+    fn hotspot_group_has_hotspot_title_and_review_guide() {
+        let mut r = result();
+        r.findings = vec![f("h1", "a.py", 2, "m", Severity::Low), f("h1", "a.py", 5, "m", Severity::Low)];
+        for x in &mut r.findings { x.kind = Kind::Hotspot; }
+        r.clones.clear();
+        let d = desired(&r, "http://g", "o/r");
+        assert_eq!(d[0].key, "rule:h1:a.py");
+        assert_eq!(d[0].parts[0].title, "[qualgate] 핫스팟 h1: a.py (2건)");
+        assert!(d[0].parts[0].body.contains("`qualgate:safe` 라벨"), "{}", d[0].parts[0].body);
+        // 일반 이슈 본문에는 안내가 없다.
+        assert!(!desired(&result(), "http://g", "o/r")[0].parts[0].body.contains("qualgate:safe"));
+    }
+
+    #[test]
+    fn filtered_items_drop_empty_groups_and_count_the_rest() {
+        let d = desired_filtered(&result(), "http://g", "o/r", &mut |key, mut items| {
+            if key == "rule:r1:a.java" { items.retain(|i| i.line == 1); items } else if key == "clone:ck" { vec![] } else { items }
+        });
+        let g = d.iter().find(|x| x.key == "rule:r1:a.java").unwrap();
+        assert_eq!(g.parts[0].title, "[qualgate] r1: a.java (1건)");
+        assert_eq!(g.parts[0].items.len(), 1);
+        assert!(!d.iter().any(|x| x.key == "clone:ck"));
+    }
+
+    #[test]
+    fn summary_shows_conditions_config_source_and_ruleset() {
+        use crate::gatecalc::Condition;
+        let mut r = result();
+        r.config_source = serde_json::json!({"config_repo": "jenny/qualgate-config", "ref": "main", "config_commit": "c0ffee", "ruleset": "std"});
+        let gate = GateResult { passed: false, conditions: vec![
+            Condition { metric: Metric::NewIssues, op: Op::Gt, value: 0.0, actual: Some(3.0), status: ConditionStatus::Failed },
+            Condition { metric: Metric::NewCoverage, op: Op::Lt, value: 80.0, actual: None, status: ConditionStatus::Skipped },
+            Condition { metric: Metric::NewHotspotsReviewed, op: Op::Lt, value: 100.0, actual: Some(50.0), status: ConditionStatus::Failed },
+        ]};
+        let (_, b) = summary(&r, 0, &gate);
+        assert!(b.contains("**게이트:** 실패"), "{b}");
+        assert!(b.contains("| new_issues | 3건 | 0건 초과 | 실패 |"), "{b}");
+        assert!(b.contains("| new_coverage | 측정 안 됨 | 80.0% 미만 | 건너뜀 |"), "{b}");
+        assert!(b.contains("| new_hotspots_reviewed | 50.0% | 100.0% 미만 | 실패 |"), "{b}");
+        assert!(b.contains("jenny/qualgate-config") && b.contains("c0ffee") && b.contains("**룰셋:** std"), "{b}");
+        let (_, empty) = summary(&result(), 0, &pass());
+        assert!(empty.contains("**게이트:** 통과") && empty.contains("게이트 조건이 없어"), "{empty}");
+        assert!(empty.contains("**룰셋:** 알 수 없음"), "{empty}");
     }
 
     #[test]
@@ -281,7 +374,7 @@ mod tests {
 
     #[test]
     fn summary_marks_unmeasured_and_skipped() {
-        let (t, b) = summary(&result(), 3);
+        let (t, b) = summary(&result(), 3, &pass());
         assert_eq!(t, "[qualgate] 품질 요약");
         assert!(b.contains("70.5"));
         assert!(b.contains("측정 안 됨"));
@@ -350,7 +443,7 @@ mod tests {
         r.unanalyzed = vec!["`@u`.py".into()];
         let body = &desired(&r, "http://g", "o/r")[0].parts[0].body;
         let shown = &body[..body.rfind(MARK).unwrap()];
-        let (_, sum) = summary(&r, 0);
+        let (_, sum) = summary(&r, 0, &pass());
         let sum_shown = sum[..sum.rfind(MARK).unwrap()].replace("`abc`", "");
         for text in [shown, sum_shown.as_str()] {
             assert!(!text.contains('`'), "{text}");
@@ -375,13 +468,13 @@ mod tests {
     #[test]
     fn commit_only_summary_difference_is_ignored() {
         let r = result();
-        let (_, a) = summary(&r, 0);
+        let (_, a) = summary(&r, 0, &pass());
         let mut other = result();
         other.commit = "def".into();
-        let (_, b) = summary(&other, 0);
+        let (_, b) = summary(&other, 0, &pass());
         assert_ne!(a, b);
         assert!(same_except_commit(&a, &b));
         other.metrics.coverage = Some(10.0);
-        assert!(!same_except_commit(&a, &summary(&other, 0).1));
+        assert!(!same_except_commit(&a, &summary(&other, 0, &pass()).1));
     }
 }
