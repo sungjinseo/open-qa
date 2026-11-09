@@ -1,30 +1,18 @@
 #!/usr/bin/env bash
 # 실제 Gitea로 생성, 재실행 무변화, 종료, 재오픈(코멘트 포함), 무시 라벨을 검증한다.
 set -euo pipefail
-export MSYS_NO_PATHCONV=1
-# 이름과 포트에 무작위 값을 넣어 남은 실행과 겹치지 않게 한다.
-SFX="$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')"
-NET="qg-it-$SFX"; GITEA="qg-gitea-$SFX"
-PORT=$((20000 + RANDOM % 20000))
+. "$(dirname "$0")/lib/gitea_local.sh"
 work=""; out=""
 cleanup() {
-  docker rm -f "$GITEA" >/dev/null 2>&1 || true
-  docker network rm "$NET" >/dev/null 2>&1 || true
+  gitea_local_cleanup
   [ -z "$work" ] || rm -rf "$work"
   [ -z "$out" ] || rm -rf "$out"
 }
 trap cleanup EXIT
-docker network create "$NET" >/dev/null
-docker run -d --name "$GITEA" --network "$NET" -p "127.0.0.1:$PORT:3000" -e GITEA__security__INSTALL_LOCK=true -e GITEA__database__DB_TYPE=sqlite3 gitea/gitea:1 >/dev/null
-ready=0
-for _ in $(seq 60); do
-  if curl -sf "localhost:$PORT/api/healthz" >/dev/null; then ready=1; break; fi
-  sleep 2
-done
-[ "$ready" = 1 ] || { echo "FAIL: Gitea가 120초 안에 준비되지 않음"; docker logs "$GITEA" 2>&1 | tail -20; exit 1; }
-docker exec -u git "$GITEA" gitea admin user create --admin --username qg --password qgpass1234 --email qg@example.com >/dev/null
-ADMIN=$(docker exec -u git "$GITEA" gitea admin user generate-access-token --username qg --token-name admin --scopes all --raw)
-TOKEN=$(docker exec -u git "$GITEA" gitea admin user generate-access-token --username qg --token-name it --scopes "${QG_TOKEN_SCOPES:-write:issue,read:repository}" --raw)
+gitea_local_start gitea/gitea:1 qg-it
+gitea_local_admin_user qg qgpass1234
+ADMIN=$(gitea_local_token qg admin all)
+TOKEN=$(gitea_local_token qg it "${QG_TOKEN_SCOPES:-write:issue,read:repository}")
 curl -sf -H "Authorization: token $ADMIN" -H 'Content-Type: application/json' -d '{"name":"demo","default_branch":"main"}' "localhost:$PORT/api/v1/user/repos" >/dev/null
 
 work="$(mktemp -d)"; out="$(mktemp -d)"; chmod 777 "$out"

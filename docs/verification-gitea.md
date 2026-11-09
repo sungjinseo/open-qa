@@ -54,22 +54,20 @@
 | `GET V/repos/qg/app/git/commits/<sha>.patch` (ro) | 200 | `text/plain`, mbox 형식 patch |
 | `GET <root>/qg/app/commit/<sha>.diff` (ro) | 200 | 단일 커밋 diff, 위와 같은 본문. 무토큰은 공개 저장소에서만 의미 있음 |
 
-결론: 1.26.4에는 토큰으로 한 번에 받는 base...head 통합 diff 경로가 없다(compare API는 patch를 주지 않고 `.diff`는 404). 대안은 다음 둘이다.
+결론: 1.26.4에는 토큰으로 한 번에 받는 base...head 통합 diff 경로가 없다(compare API는 patch를 주지 않고 `.diff`는 404). 통합 diff를 API로 얻는 방법은 아래 두 가지뿐이고, 둘 다 새 코드 판정에 채택하지 않는다(결정은 §6).
 
-### 대안 A(권장): 커밋별 diff 이어 붙이기, 호출 1 + N회
+### API 대안 A(채택하지 않음): 커밋별 diff 이어 붙이기, 호출 1 + N회
 
-1. `GET V/repos/o/r/compare/<base>...<head>`로 `commits[]`를 얻는다(`total_commits`로 개수, 최신이 앞). 각 항목의 `sha`, `parents`, `files`를 쓴다.
+1. `GET V/repos/o/r/compare/<base>...<head>`로 `commits[]`(`sha`, `parents`, `files`)를 얻는다.
 2. 각 커밋마다 `GET V/repos/o/r/git/commits/<sha>.diff`(ro, 200, `text/plain`).
-3. 오래된 순으로 이어 붙인다. 새 코드 판정용이면 커밋별 hunk를 그대로 합쳐 파일별로 추가 행(`+`)을 모으면 충분하다. 같은 줄을 여러 커밋이 고쳐도 중간 상태 줄이 나타날 수 있어, 순 효과(base→head) diff와는 다르다.
-4. 병합 커밋은 `.diff`가 첫 부모 기준인지 이 프로브에서 측정하지 않았다(선형 이력만 측정).
+3. 한계: 커밋별 `+` 행을 합치면 이후 커밋에서 바뀌거나 지워진 줄까지 센다(과대 계수). base→head 순 효과 diff와 다르다. 병합 커밋의 `.diff`가 어느 부모 기준인지는 측정하지 않았다(선형 이력만 측정). 그래서 새 코드 판정에는 쓰지 않는다.
 
-### 대안 B: 임시 PR로 순 효과 diff 한 번에
+### API 대안 B(채택하지 않음): 임시 PR로 순 효과 diff
 
-1. `POST V/repos/o/r/pulls` `{"base":"<base 브랜치>","head":"<head 브랜치>","title":"..."}` → 201, `number`. 쓰기 권한(`write:repository`)과 브랜치 이름이 필요하다(커밋 sha 불가). 저장소에 PR이 남으므로 작업 후 닫아야 한다.
-2. `GET V/repos/o/r/pulls/<n>.diff`(ro) → 200 `text/plain`, base와 head의 순 효과 통합 diff(3 파일, 22줄 확인). `.patch`도 200.
-3. `GET V/repos/o/r/pulls/<n>/files` → 200 배열 `{filename,status,additions,deletions,changes}`이며 `patch`는 없다. 페이지 헤더 `X-Total-Count`, `X-HasMore`.
+1. `POST V/repos/o/r/pulls` `{"base":"<base 브랜치>","head":"<head 브랜치>","title":"..."}` → 201. `write:repository`와 브랜치 이름이 필요하고(커밋 sha 불가) 저장소에 PR이 남는다.
+2. `GET V/repos/o/r/pulls/<n>.diff`(ro) → 200 `text/plain`, 순 효과 통합 diff. `pulls/<n>/files`는 patch 없이 `{filename,status,additions,deletions,changes}`만 준다.
 
-운영 도구가 읽기 전용 토큰으로만 동작해야 하면 B는 쓸 수 없다. A는 읽기 토큰으로 충분하다.
+읽기 전용 토큰만 쓰는 운영 방침과 맞지 않아 쓰지 않는다.
 
 ## 4. 대용량과 한도
 
@@ -90,7 +88,9 @@
 
 ## 6. Task 8 지침 요약
 
-- 설정 파일: `contents?ref=` JSON의 `content`를 base64 디코드. 404는 파일 없음.
-- 기준 커밋: `commits?sha=<branch>&until=<RFC3339>&limit=1`의 `[0].sha`. committer 날짜 기준.
-- 범위 diff: 단일 호출 경로 없음. 대안 A(compare 커밋 목록 + 커밋별 `git/commits/<sha>.diff`)를 기본으로 한다.
-- 푸시 직후 409(빈 저장소)는 재시도로 처리.
+결정(컨트롤러): 새 코드 판정용 범위 diff는 API로 받지 않고 git으로 계산한다. 작업 디렉터리에 `git clone --bare --single-branch --shallow-since=<기준 날짜>`(범위 제한)로 가져온 뒤 `git diff -U0 <base> <commit>`을 쓴다. 순 효과 diff이므로 과대 계수와 병합 커밋 문제가 없다.
+
+Task 8이 계속 쓰는 API 사실:
+- 설정 파일: `contents?ref=` JSON의 `content`를 base64 디코드. 404는 파일 없음(§1).
+- 기준 커밋 참고값: `commits?sha=<branch>&until=<RFC3339>&limit=1`의 `[0].sha`. committer 날짜 기준(§2). 최종 기준은 clone한 이력에서 확인한다.
+- 푸시 직후 409(빈 저장소)는 재시도로 처리(§2).

@@ -1,30 +1,19 @@
 #!/usr/bin/env bash
 # 대상 버전(gitea/gitea:1.26.4)의 파일/커밋/diff API 응답을 실측해 출력한다. 로컬 일회용 컨테이너만 쓴다.
 set -eu
-export MSYS_NO_PATHCONV=1
-SFX="$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')"
-NET="qg-probe-$SFX"; GITEA="qg-probe-gitea-$SFX"
-PORT=$((20000 + RANDOM % 20000))
+. "$(dirname "$0")/lib/gitea_local.sh"
 work=""; BODY="$(cygpath -m "$(mktemp)" 2>/dev/null || mktemp)"
 cleanup() {
-  docker rm -f "$GITEA" >/dev/null 2>&1 || true
-  docker network rm "$NET" >/dev/null 2>&1 || true
+  gitea_local_cleanup
   [ -z "$work" ] || rm -rf "$work"
   rm -f "$BODY"
 }
 trap cleanup EXIT
-docker network create "$NET" >/dev/null
-docker run -d --name "$GITEA" --network "$NET" -p "127.0.0.1:$PORT:3000" -e GITEA__security__INSTALL_LOCK=true -e GITEA__database__DB_TYPE=sqlite3 gitea/gitea:1.26.4 >/dev/null
-ready=0
-for _ in $(seq 60); do
-  if curl -sf "127.0.0.1:$PORT/api/healthz" >/dev/null; then ready=1; break; fi
-  sleep 2
-done
-[ "$ready" = 1 ] || { echo "FAIL: Gitea not ready"; docker logs "$GITEA" 2>&1 | tail -20; exit 1; }
-docker exec -u git "$GITEA" gitea admin user create --admin --username qg --password qgpass1234 --email qg@example.com >/dev/null
-ADMIN=$(docker exec -u git "$GITEA" gitea admin user generate-access-token --username qg --token-name admin --scopes all --raw)
+gitea_local_start gitea/gitea:1.26.4 qg-probe
+gitea_local_admin_user qg qgpass1234
+ADMIN=$(gitea_local_token qg admin all)
 # 읽기 전용 토큰: 운영 토큰과 같은 최소 범위로 diff 경로의 인증을 확인한다.
-RO=$(docker exec -u git "$GITEA" gitea admin user generate-access-token --username qg --token-name ro --scopes "read:repository,read:issue" --raw)
+RO=$(gitea_local_token qg ro "read:repository,read:issue")
 ROOT="http://127.0.0.1:$PORT"
 V="$ROOT/api/v1"
 GURL="http://qg:qgpass1234@127.0.0.1:$PORT/qg/app.git"
@@ -88,11 +77,12 @@ mk c2 "2020-01-05T12:00:00+00:00" "2020-03-10T12:00:00+00:00"
 mk c3 "2020-05-10T12:00:00+00:00" "2020-05-10T12:00:00+00:00"
 git -C "$w" push -q "$GURL" main 2>&1 | tail -2
 # 푸시 직후 한동안 commits API가 409(Git Repository is empty)를 돌려주는지 측정한다.
-n409=0
+n409=0; st=""
 for _ in $(seq 40); do
   st=$(curl -s -o "$BODY" -w "%{http_code}" -H "Authorization: token $ADMIN" "$V/repos/qg/app/commits?sha=main&limit=1")
   [ "$st" = 200 ] && break; n409=$((n409+1)); sleep 0.5
 done
+[ "$st" = 200 ] || { echo "FAIL: qg/app never became ready after push (last status $st)"; exit 1; }
 echo "after push: commits API non-200 polls (0.5s each) before 200: $n409 (last status $st)"
 C1=$(git -C "$w" rev-parse HEAD~2); C2=$(git -C "$w" rev-parse HEAD~1); C3=$(git -C "$w" rev-parse HEAD)
 echo "c1=$C1 (A=C=01-10) c2=$C2 (author 01-05, committer 03-10) c3=$C3 (05-10)"
