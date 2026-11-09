@@ -1,6 +1,8 @@
 import java.sql.*;
+
 class UserDao {
-    ResultSet find(Statement s, String id) throws SQLException {
-        return s.executeQuery("select * from users where id=" + id);
+    ResultSet find(Connection c, String name) throws SQLException {
+        Statement s = c.createStatement();
+        return s.executeQuery("SELECT * FROM users WHERE name = '" + name + "'");
     }
 }

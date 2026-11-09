@@ -1,9 +1,9 @@
-class E {
-    void f(Runnable r) {
+class Task {
+    void run(Runnable r) {
         try {
             r.run();
         } catch (Throwable t) {
-            System.err.println(t);
+            System.err.println("failed");
         }
     }
 }

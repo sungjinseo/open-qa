@@ -1,0 +1,16 @@
+rules:
+  - id: java.code-injection-script
+    languages: [java]
+    severity: ERROR
+    message: "[행안부 IV-02 코드 삽입] 문자열을 코드나 표현식으로 해석해 실행합니다(ScriptEngine.eval, GroovyShell, SpEL). 외부 값이 섞이면 서버에서 임의 코드가 실행됩니다. 실행할 동작을 허용 목록으로 제한하고 SpEL은 SimpleEvaluationContext를 쓰세요."
+    pattern-either:
+      - pattern: (ScriptEngine $E).eval($X, ...)
+      - pattern: $E.eval($X, ...)
+      - pattern: (GroovyShell $G).evaluate($X)
+      - pattern: (ExpressionParser $P).parseExpression($X)
+    metadata:
+      qualgate_id: java.code-injection-script
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-02
+      cwe: "CWE-94"

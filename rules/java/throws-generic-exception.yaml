@@ -1,0 +1,16 @@
+rules:
+  - id: java.throws-generic-exception
+    languages: [java]
+    severity: INFO
+    message: "[행안부 EH-03 부적절한 예외 처리] 메서드가 throws Exception으로 모든 예외를 위임합니다. 호출자가 어떤 오류를 처리해야 하는지 알 수 없어 부적절한 예외 처리로 이어집니다. 구체적인 예외 타입을 선언하세요."
+    pattern-either:
+      - pattern: |
+          $T $M(...) throws Exception {...}
+      - pattern: |
+          $T $M(...) throws Throwable {...}
+    metadata:
+      qualgate_id: java.throws-generic-exception
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: EH-03
+      cwe: "CWE-397"

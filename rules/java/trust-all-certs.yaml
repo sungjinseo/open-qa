@@ -1,0 +1,16 @@
+rules:
+  - id: java.trust-all-certs
+    languages: [java]
+    severity: ERROR
+    message: "[행안부 SF-11 부적절한 인증서 유효성 검증] X509TrustManager의 인증서 검증 메서드가 비어 있어 모든 인증서를 신뢰합니다. 중간자 공격에 그대로 노출됩니다. 기본 TrustManager를 쓰거나 신뢰할 CA를 지정한 KeyStore를 사용하세요."
+    pattern-either:
+      - pattern: |
+          public void checkServerTrusted(X509Certificate[] $A, String $B) {}
+      - pattern: |
+          public void checkServerTrusted(X509Certificate[] $A, String $B) throws CertificateException {}
+    metadata:
+      qualgate_id: java.trust-all-certs
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: SF-11
+      cwe: "CWE-295"

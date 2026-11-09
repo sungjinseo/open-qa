@@ -1,0 +1,14 @@
+rules:
+  - id: java.ldap-injection
+    languages: [java]
+    severity: ERROR
+    message: "[행안부 IV-10 LDAP 삽입] LDAP 검색 필터를 입력값이 섞인 문자열로 만듭니다. 필터를 조작해 다른 계정을 조회하거나 인증을 우회할 수 있습니다. 입력값을 LDAP 이스케이프하거나 파라미터화된 search(base, filter, args, controls)를 쓰세요."
+    pattern-either:
+      - pattern: $CTX.search($BASE, "..." + $X, ...)
+      - pattern: $CTX.search($BASE, $A + $B, ...)
+    metadata:
+      qualgate_id: java.ldap-injection
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-10
+      cwe: "CWE-90"

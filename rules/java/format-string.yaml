@@ -1,0 +1,36 @@
+rules:
+  - id: java.format-string
+    languages: [java]
+    severity: WARNING
+    message: "[행안부 IV-17 포맷 스트링 삽입] 요청 값이 포맷 문자열 자리에 들어갑니다. %s·%n 같은 지시자로 예외를 유발하거나 서식을 조작할 수 있습니다. 포맷 문자열은 고정 리터럴로 두고 값은 인자로 넘기세요."
+    mode: taint
+    pattern-sources:
+      - pattern: (HttpServletRequest $R).getParameter(...)
+      - pattern: (HttpServletRequest $R).getHeader(...)
+      - pattern: (HttpServletRequest $R).getQueryString()
+      - patterns:
+          - pattern-inside: |
+              $RET $M(..., @RequestParam $T $X, ...) {...}
+          - focus-metavariable: $X
+      - patterns:
+          - pattern-inside: |
+              $RET $M(..., @PathVariable $T $X, ...) {...}
+          - focus-metavariable: $X
+      - patterns:
+          - pattern-inside: |
+              $RET $M(..., @RequestBody $T $X, ...) {...}
+          - focus-metavariable: $X
+
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: String.format($F, ...)
+              - pattern: $W.printf($F, ...)
+              - pattern: $S.formatted(...)
+          - focus-metavariable: $F
+    metadata:
+      qualgate_id: java.format-string
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: IV-17
+      cwe: "CWE-134"

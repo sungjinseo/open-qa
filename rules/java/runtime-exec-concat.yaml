@@ -2,10 +2,16 @@ rules:
   - id: java.runtime-exec-concat
     languages: [java]
     severity: ERROR
-    message: "외부 입력을 이어 붙여 명령을 실행하면 명령 인젝션 위험이 있습니다. 인자를 배열로 분리하고 입력을 검증하세요."
-    pattern: |
-      Runtime.getRuntime().exec("..." + $X)
+    message: "[행안부 IV-05 운영체제 명령어 삽입] 변수가 섞인 문자열로 운영체제 명령을 실행합니다. 외부 값에 ; 나 && 가 들어 있으면 서버에서 임의 명령이 실행됩니다. 명령과 인자를 배열로 분리해 ProcessBuilder에 넘기고 인자는 허용 목록으로 검증하세요."
+    pattern-either:
+      - pattern: Runtime.getRuntime().exec("..." + $X)
+      - pattern: Runtime.getRuntime().exec($A + $B)
+      - pattern: new ProcessBuilder("sh", "-c", $X)
+      - pattern: new ProcessBuilder("bash", "-c", $X)
+      - pattern: new ProcessBuilder("cmd", "/c", $X)
     metadata:
       qualgate_id: java.runtime-exec-concat
       qualgate_severity: critical
       qualgate_category: security
+      qualgate_mois: IV-05
+      cwe: "CWE-78"

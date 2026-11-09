@@ -1,0 +1,16 @@
+rules:
+  - id: java.plain-http-url
+    languages: [java]
+    severity: INFO
+    message: "[행안부 SF-05 암호화되지 않은 중요정보] http:// 주소로 통신합니다. 전송 중 인증 정보와 개인정보가 평문으로 노출됩니다. https:// 를 사용하세요."
+    patterns:
+      - pattern-either:
+          - pattern: new URL("...")
+          - pattern: URI.create("...")
+      - pattern-regex: \(\s*"http://(?!localhost|127\.0\.0\.1)
+    metadata:
+      qualgate_id: java.plain-http-url
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: SF-05
+      cwe: "CWE-319"

@@ -1,0 +1,17 @@
+rules:
+  - id: java.jwt-no-verify
+    languages: [java]
+    severity: ERROR
+    message: "[행안부 SF-10 부적절한 전자서명 확인] JWT 서명을 검증하지 않고 내용을 읽습니다. 공격자가 만든 토큰이 그대로 통과합니다. 서명 키를 지정한 parseClaimsJws()나 JWTVerifier.verify()를 쓰세요."
+    pattern-either:
+      - pattern: Jwts.parser().parse($T)
+      - pattern: Jwts.parser().parseClaimsJwt($T)
+      - pattern: Jwts.parserBuilder().build().parseClaimsJwt($T)
+      - pattern: JWT.decode($T)
+      - pattern: Algorithm.none()
+    metadata:
+      qualgate_id: java.jwt-no-verify
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: SF-10
+      cwe: "CWE-347"

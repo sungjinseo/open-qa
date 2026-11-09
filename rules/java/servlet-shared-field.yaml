@@ -1,0 +1,25 @@
+rules:
+  - id: java.servlet-shared-field
+    languages: [java]
+    severity: WARNING
+    message: "[행안부 EN-01 잘못된 세션에 의한 데이터 정보노출] 서블릿은 하나의 인스턴스를 여러 요청이 공유하는데 인스턴스 필드에 요청별 값을 저장합니다. 다른 사용자의 요청 데이터가 섞여 정보가 노출됩니다. 요청별 값은 지역 변수로 두세요."
+    patterns:
+      - pattern: |
+          class $C extends HttpServlet {
+            ...
+            $T $F;
+            ...
+            $R $M(HttpServletRequest $REQ, ...) {
+              ...
+              $F = ...;
+              ...
+            }
+            ...
+          }
+      - focus-metavariable: $F
+    metadata:
+      qualgate_id: java.servlet-shared-field
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: EN-01
+      cwe: "CWE-488"

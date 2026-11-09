@@ -1,7 +1,3 @@
-class Conf {
-    void init() {
-        String dbPassword = "hunter2";
-        connect(dbPassword);
-    }
-    void connect(String p) {}
+class DbConfig {
+    private static final String DB_PASSWORD = "P@ssw0rd-prod";
 }

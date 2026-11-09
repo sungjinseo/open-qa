@@ -1,11 +1,16 @@
 rules:
   - id: java.catch-throwable
     languages: [java]
-    severity: WARNING
-    message: "Throwable을 잡으면 OutOfMemoryError 같은 복구 불가 오류까지 삼킵니다. 구체적인 예외 타입을 잡으세요."
-    pattern: |
-      try { ... } catch (Throwable $E) { ... }
+    severity: INFO
+    message: "[행안부 EH-03 부적절한 예외 처리] Throwable·Exception 같은 광범위한 예외를 한꺼번에 잡습니다. OutOfMemoryError까지 삼키거나 서로 다른 오류를 같은 방식으로 처리하게 됩니다. 처리할 수 있는 구체적인 예외 타입만 잡으세요."
+    pattern-either:
+      - pattern: |
+          try { ... } catch (Throwable $E) { ... }
+      - pattern: |
+          try { ... } catch (Exception $E) { ... }
     metadata:
       qualgate_id: java.catch-throwable
-      qualgate_severity: medium
-      qualgate_category: reliability
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: EH-03
+      cwe: "CWE-396"

@@ -1,5 +1,6 @@
 import javax.crypto.Cipher;
-class C {
+
+class Enc {
     Cipher make() throws Exception {
         return Cipher.getInstance("DES");
     }

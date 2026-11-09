@@ -1,11 +1,13 @@
 rules:
   - id: java.empty-catch
     languages: [java]
-    severity: WARNING
-    message: "빈 catch 블록은 예외를 조용히 삼켜 장애 원인을 숨깁니다. 로깅하거나 처리하거나 다시 던지세요."
+    severity: INFO
+    message: "[행안부 EH-02 오류상황 대응 부재] 예외를 잡고 아무 처리도 하지 않습니다. 인증·결제 같은 실패가 조용히 무시되어 이후 동작이 비정상이 됩니다. 로깅·복구·상위 전파 등 적절히 대응하세요."
     pattern: |
       try { ... } catch ($T $E) { }
     metadata:
       qualgate_id: java.empty-catch
-      qualgate_severity: medium
-      qualgate_category: reliability
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: EH-02
+      cwe: "CWE-390"

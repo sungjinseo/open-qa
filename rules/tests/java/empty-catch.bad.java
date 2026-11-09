@@ -1,8 +1,8 @@
-class E {
-    void f() {
+class Loader {
+    void load() {
         try {
-            Integer.parseInt("x");
-        } catch (NumberFormatException e) {
+            Class.forName("x.Y");
+        } catch (ClassNotFoundException e) {
         }
     }
 }

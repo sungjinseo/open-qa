@@ -1,0 +1,29 @@
+rules:
+  - id: java.resource-not-closed
+    languages: [java]
+    severity: INFO
+    message: "[행안부 CE-02 부적절한 자원 해제] 스트림을 try-with-resources 없이 열었습니다. 예외가 나면 close()가 호출되지 않아 파일 핸들이 누수되어 서비스가 멈출 수 있습니다. try-with-resources로 열어 자동으로 닫으세요."
+    patterns:
+      - pattern-either:
+          - pattern: $T $V = new FileInputStream(...);
+          - pattern: $T $V = new FileOutputStream(...);
+          - pattern: $T $V = new FileReader(...);
+          - pattern: $T $V = new FileWriter(...);
+      - pattern-not-inside: |
+          try ($T2 $V2 = $E) {
+            ...
+          }
+      - pattern-not-inside: |
+          $T $V = $X;
+          ...
+          try {
+            ...
+          } finally {
+            ...
+          }
+    metadata:
+      qualgate_id: java.resource-not-closed
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: CE-02
+      cwe: "CWE-404"

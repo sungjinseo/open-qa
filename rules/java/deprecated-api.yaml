@@ -1,0 +1,17 @@
+rules:
+  - id: java.deprecated-api
+    languages: [java]
+    severity: INFO
+    message: "[행안부 AM-02 취약한 API 사용] 폐기됐거나 위험한 API를 씁니다(Thread.stop/suspend/resume, runFinalizersOnExit 등). 데드락·불안정한 상태 등 알려진 문제가 있습니다. 인터럽트 플래그나 java.util.concurrent 같은 대체 방식을 쓰세요."
+    pattern-either:
+      - pattern: (Thread $T).stop()
+      - pattern: (Thread $T).suspend()
+      - pattern: (Thread $T).resume()
+      - pattern: System.runFinalizersOnExit(...)
+      - pattern: Runtime.runFinalizersOnExit(...)
+    metadata:
+      qualgate_id: java.deprecated-api
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: AM-02
+      cwe: "CWE-477"

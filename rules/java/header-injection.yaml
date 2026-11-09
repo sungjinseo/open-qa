@@ -1,0 +1,37 @@
+rules:
+  - id: java.header-injection
+    languages: [java]
+    severity: WARNING
+    message: "[행안부 IV-13 HTTP 응답분할] 요청 값을 응답 헤더나 쿠키 값에 그대로 넣습니다. CR/LF가 섞이면 응답이 쪼개져 헤더·본문이 위조됩니다. 줄바꿈 문자를 제거하거나 URL 인코딩하세요."
+    mode: taint
+    pattern-sources:
+      - pattern: (HttpServletRequest $R).getParameter(...)
+      - pattern: (HttpServletRequest $R).getHeader(...)
+      - pattern: (HttpServletRequest $R).getQueryString()
+      - patterns:
+          - pattern-inside: |
+              $RET $M(..., @RequestParam $T $X, ...) {...}
+          - focus-metavariable: $X
+      - patterns:
+          - pattern-inside: |
+              $RET $M(..., @PathVariable $T $X, ...) {...}
+          - focus-metavariable: $X
+      - patterns:
+          - pattern-inside: |
+              $RET $M(..., @RequestBody $T $X, ...) {...}
+          - focus-metavariable: $X
+
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $RESP.setHeader($N, $V)
+              - pattern: $RESP.addHeader($N, $V)
+          - focus-metavariable: $V
+    pattern-sanitizers:
+      - pattern: URLEncoder.encode(...)
+    metadata:
+      qualgate_id: java.header-injection
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: IV-13
+      cwe: "CWE-113"

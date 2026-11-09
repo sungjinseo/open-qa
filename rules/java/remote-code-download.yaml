@@ -1,0 +1,14 @@
+rules:
+  - id: java.remote-code-download
+    languages: [java]
+    severity: WARNING
+    message: "[행안부 SF-15 무결성 검사 없는 코드 다운로드] 원격 URL에서 받은 코드를 무결성 검사 없이 클래스로 로드합니다. 전송 중 변조되거나 서버가 침해되면 악성 코드가 실행됩니다. 해시·서명을 검증하고 신뢰된 출처만 쓰세요."
+    pattern-either:
+      - pattern: new URLClassLoader(...)
+      - pattern: $L.defineClass(...)
+    metadata:
+      qualgate_id: java.remote-code-download
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: SF-15
+      cwe: "CWE-494"

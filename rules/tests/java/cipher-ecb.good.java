@@ -1,6 +1,7 @@
 import javax.crypto.Cipher;
-class C {
+
+class Enc {
     Cipher make() throws Exception {
-        return Cipher.getInstance("AES/GCM/NoPadding");
+        return Cipher.getInstance("AES/CBC/PKCS5Padding");
     }
 }

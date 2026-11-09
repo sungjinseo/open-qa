@@ -1,6 +1,7 @@
 import java.sql.*;
+
 class UserDao {
-    int rename(Statement s, String name) throws SQLException {
-        return s.executeUpdate("update users set name='" + name + "'");
+    void rename(Statement s, String id, String name) throws SQLException {
+        s.executeUpdate("UPDATE users SET name = '" + name + "' WHERE id = " + id);
     }
 }

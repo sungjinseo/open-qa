@@ -1,8 +1,8 @@
-class L {
-    void f() {
+class Job {
+    void run() {
         try {
             Integer.parseInt("x");
-        } catch (Exception e) {
+        } catch (NumberFormatException e) {
             e.printStackTrace();
         }
     }

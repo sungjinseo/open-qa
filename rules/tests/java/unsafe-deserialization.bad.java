@@ -1,6 +1,7 @@
 import java.io.*;
-class D {
-    Object read(InputStream in) throws Exception {
+
+class Loader {
+    Object load(InputStream in) throws Exception {
         return new ObjectInputStream(in).readObject();
     }
 }

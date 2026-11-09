@@ -1,6 +1,7 @@
-import javax.net.ssl.*;
-class T {
+import javax.net.ssl.HttpsURLConnection;
+
+class Tls {
     void init() {
-        HttpsURLConnection.setDefaultHostnameVerifier((h, s) -> true);
+        HttpsURLConnection.setDefaultHostnameVerifier((host, session) -> true);
     }
 }

@@ -1,0 +1,38 @@
+rules:
+  - id: java.path-traversal
+    languages: [java]
+    severity: ERROR
+    message: "[행안부 IV-03 경로 조작 및 자원 삽입] 요청 값이 검증 없이 파일 경로로 쓰입니다. ../ 로 업로드 디렉터리 밖의 파일을 읽거나 덮어쓸 수 있습니다. FilenameUtils.getName()으로 파일 이름만 쓰고 normalize 결과가 기준 디렉터리 안인지 확인하세요."
+    mode: taint
+    pattern-sources:
+      - pattern: (HttpServletRequest $R).getParameter(...)
+      - pattern: (HttpServletRequest $R).getHeader(...)
+      - pattern: (HttpServletRequest $R).getQueryString()
+      - patterns:
+          - pattern-inside: |
+              $RET $M(..., @RequestParam $T $X, ...) {...}
+          - focus-metavariable: $X
+      - patterns:
+          - pattern-inside: |
+              $RET $M(..., @PathVariable $T $X, ...) {...}
+          - focus-metavariable: $X
+      - patterns:
+          - pattern-inside: |
+              $RET $M(..., @RequestBody $T $X, ...) {...}
+          - focus-metavariable: $X
+
+    pattern-sinks:
+      - pattern: new File(...)
+      - pattern: new FileInputStream(...)
+      - pattern: new FileReader(...)
+      - pattern: Paths.get(...)
+      - pattern: Files.readAllBytes(...)
+    pattern-sanitizers:
+      - pattern: FilenameUtils.getName(...)
+      - pattern: (Path $P).getFileName()
+    metadata:
+      qualgate_id: java.path-traversal
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-03
+      cwe: "CWE-22"

@@ -1,5 +1,5 @@
-class Shell {
-    void ping(String host) throws Exception {
+class Ping {
+    void run(String host) throws java.io.IOException {
         Runtime.getRuntime().exec("ping -c 1 " + host);
     }
 }

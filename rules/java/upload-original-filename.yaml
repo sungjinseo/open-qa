@@ -1,0 +1,15 @@
+rules:
+  - id: java.upload-original-filename
+    languages: [java]
+    severity: WARNING
+    message: "[행안부 IV-06 위험한 형식 파일 업로드] 업로드된 파일의 원본 이름·확장자를 검증 없이 저장 경로에 씁니다. .jsp 같은 실행 가능한 파일을 올려 서버를 장악하거나 ../ 로 임의 위치에 쓸 수 있습니다. 확장자 허용 목록을 확인하고 저장 이름은 서버가 UUID로 새로 만드세요."
+    pattern-either:
+      - pattern: new File($D, $M.getOriginalFilename())
+      - pattern: Paths.get($D, $M.getOriginalFilename())
+      - pattern: new File($D + $M.getOriginalFilename())
+    metadata:
+      qualgate_id: java.upload-original-filename
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: IV-06
+      cwe: "CWE-434"

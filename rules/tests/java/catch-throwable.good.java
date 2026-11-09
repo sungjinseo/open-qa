@@ -1,9 +1,9 @@
-class E {
-    void f(Runnable r) {
+class Task {
+    void run(Runnable r) {
         try {
             r.run();
-        } catch (IllegalStateException e) {
-            System.err.println(e);
+        } catch (IllegalStateException t) {
+            System.err.println("failed");
         }
     }
 }

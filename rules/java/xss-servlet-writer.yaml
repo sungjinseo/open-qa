@@ -1,0 +1,41 @@
+rules:
+  - id: java.xss-servlet-writer
+    languages: [java]
+    severity: ERROR
+    message: "[행안부 IV-04 크로스사이트 스크립트] 요청 값을 이스케이프 없이 응답 본문으로 출력합니다. 다른 사용자의 브라우저에서 스크립트가 실행되어 세션이 탈취될 수 있습니다. HtmlUtils.htmlEscape·ESAPI 인코더로 출력 인코딩을 하거나 템플릿 엔진의 자동 이스케이프를 쓰세요."
+    mode: taint
+    pattern-sources:
+      - pattern: (HttpServletRequest $R).getParameter(...)
+      - pattern: (HttpServletRequest $R).getHeader(...)
+      - pattern: (HttpServletRequest $R).getQueryString()
+      - patterns:
+          - pattern-inside: |
+              $RET $M(..., @RequestParam $T $X, ...) {...}
+          - focus-metavariable: $X
+      - patterns:
+          - pattern-inside: |
+              $RET $M(..., @PathVariable $T $X, ...) {...}
+          - focus-metavariable: $X
+      - patterns:
+          - pattern-inside: |
+              $RET $M(..., @RequestBody $T $X, ...) {...}
+          - focus-metavariable: $X
+
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $RESP.getWriter().println($V)
+              - pattern: $RESP.getWriter().print($V)
+              - pattern: $RESP.getWriter().write($V)
+              - pattern: $W.println($V)
+          - focus-metavariable: $V
+    pattern-sanitizers:
+      - pattern: HtmlUtils.htmlEscape(...)
+      - pattern: StringEscapeUtils.escapeHtml4(...)
+      - pattern: ESAPI.encoder().encodeForHTML(...)
+    metadata:
+      qualgate_id: java.xss-servlet-writer
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-04
+      cwe: "CWE-79"
