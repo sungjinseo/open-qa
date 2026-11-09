@@ -44,6 +44,12 @@ mk() { chmod -R u+rwx /tmp/r 2>/dev/null; rm -rf /tmp/r; mkdir -p /tmp/r/priv &&
 mk; chmod 700 priv; chmod 000 priv
 qualgate scan --src /tmp/r --out /tmp/o1 >/dev/null 2>/tmp/err; code=$?
 [ "$code" -eq 2 ] && echo "unreadable-dir OK exit=2 ($(head -c 120 /tmp/err))" || { echo "FAIL unreadable-dir exit=$code"; exit 1; }
+# 제외한 디렉터리는 읽을 수 없어도 탐색에서 건너뛴다(A1).
+mk; printf "[scan]
+exclude = [\"**/priv/**\"]
+" > .qualgate.toml; chmod 700 priv; chmod 000 priv
+qualgate scan --src /tmp/r --out /tmp/o3 >/dev/null 2>/tmp/err3; code=$?
+[ "$code" -le 1 ] && echo "excluded-unreadable-dir OK exit=$code" || { echo "FAIL excluded-unreadable-dir exit=$code"; head -c 300 /tmp/err3; exit 1; }
 mk; chmod 000 priv/p.py
 qualgate scan --src /tmp/r --out /tmp/o2 >/dev/null 2>&1; code=$?
 grep -q "\"priv/p.py\"" /tmp/o2/result.json && [ "$code" -le 1 ] && echo "unreadable-file OK unanalyzed" || { echo "FAIL unreadable-file exit=$code"; cat /tmp/o2/result.json; exit 1; }

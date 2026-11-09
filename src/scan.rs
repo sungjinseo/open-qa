@@ -9,7 +9,7 @@ pub fn scan(src: &Path, rules_root: &Path, opengrep: &str) -> Result<ScanResult>
     let (commit, branch) = newcode::head_info(src)?;
     let exclude = fsutil::globset(&cfg.scan.exclude)?;
     let tests = fsutil::globset(&cfg.scan.test_paths)?;
-    let all = fsutil::walk(src)?;
+    let all = fsutil::walk(src, &exclude)?;
     let (code, excluded): (Vec<String>, Vec<String>) = all.iter().filter(|p| Lang::of(p).is_some()).cloned()
         .partition(|p| !exclude.is_match(p.as_str()));
     let prod: Vec<String> = code.iter().filter(|p| !tests.is_match(p.as_str())).cloned().collect();
@@ -27,7 +27,7 @@ pub fn scan(src: &Path, rules_root: &Path, opengrep: &str) -> Result<ScanResult>
 
     let d = dup::detect(src, &prod, &cfg.duplication);
     let loaded = coverage::load(src, &all, &code, &excluded, &tests, &cfg.coverage);
-    for e in &loaded.errors { eprintln!("경고: 커버리지 리포트를 읽지 못했습니다: {e}"); }
+    for e in &loaded.error_details { eprintln!("경고: 커버리지 리포트를 읽지 못했습니다: {e}"); }
 
     let changed = match newcode::changed(src, cfg.new_code.days) {
         Ok(c) => c,

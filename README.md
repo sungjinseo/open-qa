@@ -57,7 +57,7 @@ labels = []
 
 설정 파일에 알 수 없는 키가 있거나 형식이 틀리면 스캔 전에 종료 코드 2로 끝납니다. 오류 메시지에는 줄과 열만 나오고 설정 내용은 나오지 않습니다. 다음 값도 종료 코드 2입니다: `.qualgate.toml`이 심볼릭 링크, `blocking_severities`에 `info`·`low`·`medium`·`high`·`critical` 외의 값, `block_lines`나 `min_tokens`가 0, `labels`에 `qualgate:ignored`, `rules.extra_paths`가 저장소 밖(심볼릭 링크 포함)을 가리킴. `max_new_issues`는 1~100으로 조정하고 경고합니다.
 
-`exclude`가 분석 대상을 정하는 유일한 필터입니다. `.gitignore`, `.semgrepignore`, Opengrep의 파일 크기 제한과 기본 제외 폴더(`tests/` 등)는 적용하지 않습니다. 대상 파일 중 Opengrep이 스캔하지 않은 파일은 분석 실패로 기록하고 그 파일의 이슈는 닫지 않습니다. 단, 기본 규칙이 대상으로 하지 않는 `.js`, `.ts`, `.mjs`, `.cjs`, `.mts`, `.cts`(React 규칙은 `.jsx`, `.tsx`만 검사)는 스캔되지 않아도 분석 실패로 보지 않으며, 중복도와 커버리지만 측정합니다. Opengrep 1.33.1은 `.mts`, `.cts`를 아예 스캔하지 않습니다.
+`exclude`가 분석 대상을 정하는 유일한 필터입니다. `.gitignore`, `.semgrepignore`, Opengrep의 파일 크기 제한과 기본 제외 폴더(`tests/` 등)는 적용하지 않습니다. 대상 파일 중 Opengrep이 스캔하지 않은 파일은 분석 실패로 기록하고 그 파일의 이슈는 닫지 않습니다. 단, 기본 규칙이 대상으로 하지 않는 `.js`, `.ts`, `.mjs`, `.cjs`, `.mts`, `.cts`(React 규칙은 `.jsx`, `.tsx`만 검사)는 스캔되지 않아도 분석 실패로 보지 않으며, 중복도와 커버리지만 측정합니다. Opengrep 1.33.1은 `.mts`, `.cts`를 아예 스캔하지 않습니다. 이 예외는 확장자 단위입니다. Opengrep이 그 확장자의 파일을 하나라도 스캔했다면(예: 외부 규칙이 `.js`를 대상으로 하는 경우) 같은 확장자의 스캔되지 않은 파일은 분석 실패입니다. 따라서 외부 규칙을 `paths.include`로 일부 `.js` 파일에만 한정하면 나머지 `.js` 파일은 분석 실패로 기록됩니다.
 
 ## 지원 언어와 커버리지 형식
 
