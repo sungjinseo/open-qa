@@ -6,6 +6,8 @@ use std::collections::BTreeMap;
 pub const MAX_STATE_BYTES: usize = 40_000;
 pub const SUMMARY_KEY: &str = "summary";
 const MARK: &str = "<!-- qualgate:v1 ";
+const TITLE_PREFIX: &str = "[qualgate]";
+const COMMIT_LINE: &str = "**커밋:**";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IssueState { pub key: String, pub part: usize, pub items: Vec<Item> }
@@ -23,17 +25,66 @@ fn state_comment(st: &IssueState) -> String {
     format!("{MARK}{} -->", json.replace("-->", "--\\u003e").replace('<', "\\u003c"))
 }
 
-pub fn parse_state(body: &str) -> Option<IssueState> {
+fn parse_marker(body: &str, must_end_body: bool) -> Option<IssueState> {
     let start = body.rfind(MARK)? + MARK.len();
     let end = start + body[start..].find(" -->")?;
-    // 상태 주석은 본문 끝에 있어야 한다. 뒤에 글이 이어지면 인용된 것이므로 무시한다.
-    if !body[end + " -->".len()..].trim().is_empty() { return None; }
+    if must_end_body && !body[end + " -->".len()..].trim().is_empty() { return None; }
     serde_json::from_str(&body[start..end]).ok()
+}
+
+/// 상태 주석은 본문 끝에 있어야 한다. 뒤에 글이 이어지면 인용된 것이므로 무시한다.
+pub fn parse_state(body: &str) -> Option<IssueState> { parse_marker(body, true) }
+
+/// qualgate 제목의 이슈는 사람이 상태 주석 아래에 글을 덧붙여도 추적을 잃지 않게 한다.
+/// 그 제목이 아니면 사람이 만든 이슈일 수 있으므로 엄격한 규칙을 유지한다.
+pub fn parse_issue_state(title: &str, body: &str) -> Option<IssueState> {
+    parse_marker(body, !title.starts_with(TITLE_PREFIX))
+}
+
+/// 커밋 줄을 빼고 같은지 본다. 커밋만 바뀐 요약은 갱신할 이유가 없다.
+pub fn same_except_commit(a: &str, b: &str) -> bool {
+    let rest = |s: &str| s.lines().filter(|l| !l.starts_with(COMMIT_LINE)).map(str::to_string).collect::<Vec<_>>();
+    rest(a) == rest(b)
+}
+
+/// 저장소에서 온 글을 Markdown 문법 없이 그대로 보이게 한다.
+/// Gitea는 백슬래시나 엔티티로 가린 `@`도 렌더링 후 멘션으로 처리하고, 표 안에서는 백슬래시
+/// 이스케이프가 링크를 막지 못한다(실측, docs/verification.md). 그래서 엔티티를 쓰고 `@` 뒤에는
+/// 폭 없는 공백을 넣는다.
+fn esc(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '[' => out.push_str("&#91;"),
+            ']' => out.push_str("&#93;"),
+            '`' => out.push_str("&#96;"),
+            '|' => out.push_str("&#124;"),
+            '\\' => out.push_str("&#92;"),
+            '@' => out.push_str("@\u{200b}"),
+            '\n' | '\r' => out.push(' '),
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 fn cell(s: &str) -> String {
     let t: String = s.chars().take(200).collect();
-    t.replace('|', "\\|").replace('\n', " ")
+    esc(&t)
+}
+
+/// 링크 경로를 퍼센트 인코딩한다. 공백, `#`, 한글 경로도 동작해야 한다.
+fn encode_path(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    for b in path.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => out.push(b as char),
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
 }
 
 fn chunk_items(items: Vec<Item>) -> Vec<Vec<Item>> {
@@ -63,7 +114,7 @@ fn finish_parts(key: &str, title: &str, chunks: Vec<Vec<Item>>, table: impl Fn(&
 }
 
 pub fn desired(r: &ScanResult, base_url: &str, repo: &str) -> Vec<Desired> {
-    let link = |file: &str, line: u32| format!("{base_url}/{repo}/src/commit/{}/{file}#L{line}", r.commit);
+    let link = |file: &str, line: u32| format!("{base_url}/{repo}/src/commit/{}/{}#L{line}", r.commit, encode_path(file));
     let mut out = vec![];
     let mut groups: BTreeMap<(String, String), Vec<&Finding>> = BTreeMap::new();
     for f in &r.findings { groups.entry((f.rule.clone(), f.file.clone())).or_default().push(f); }
@@ -79,9 +130,9 @@ pub fn desired(r: &ScanResult, base_url: &str, repo: &str) -> Vec<Desired> {
             line_hash: f.line_hash.clone(), message: f.message.clone(),
         }).collect();
         let table = |items: &[Item]| {
-            let mut b = format!("**규칙:** `{rule}`  \n**심각도:** {severity:?}  \n**분류:** {category}\n\n{}\n\n| 위치 | 내용 |\n|---|---|\n", cell(&message));
+            let mut b = format!("**규칙:** {}  \n**심각도:** {severity:?}  \n**분류:** {}\n\n{}\n\n| 위치 | 내용 |\n|---|---|\n", esc(&rule), esc(&category), cell(&message));
             for it in items.iter().take(50) {
-                b.push_str(&format!("| [{}:{}]({}) | {} |\n", it.file, it.line, link(&it.file, it.line), cell(&it.message)));
+                b.push_str(&format!("| [{}:{}]({}) | {} |\n", esc(&it.file), it.line, link(&it.file, it.line), cell(&it.message)));
             }
             if items.len() > 50 { b.push_str(&format!("\n외 {}건\n", items.len() - 50)); }
             b
@@ -101,7 +152,7 @@ pub fn desired(r: &ScanResult, base_url: &str, repo: &str) -> Vec<Desired> {
         let table = |items: &[Item]| {
             let mut b = String::from("같은 코드가 여러 위치에 있습니다. 공통 코드로 추출하세요.\n\n| 위치 | 줄 |\n|---|---|\n");
             for it in items.iter().take(50) {
-                b.push_str(&format!("| [{}:{}]({}) | {} |\n", it.file, it.line, link(&it.file, it.line), it.message));
+                b.push_str(&format!("| [{}:{}]({}) | {} |\n", esc(&it.file), it.line, link(&it.file, it.line), esc(&it.message)));
             }
             if items.len() > 50 { b.push_str(&format!("\n외 {}건\n", items.len() - 50)); }
             b
@@ -115,7 +166,7 @@ pub fn desired(r: &ScanResult, base_url: &str, repo: &str) -> Vec<Desired> {
 fn pct(v: Option<f64>) -> String { v.map_or("측정 안 됨".to_string(), |x| format!("{x:.1}%")) }
 
 pub fn summary(r: &ScanResult, skipped: usize) -> (String, String) {
-    let mut b = format!("**게이트:** {}  \n**커밋:** `{}`\n\n", if r.gate.passed { "통과" } else { "실패" }, r.commit);
+    let mut b = format!("**게이트:** {}  \n{COMMIT_LINE} `{}`\n\n", if r.gate.passed { "통과" } else { "실패" }, r.commit);
     b.push_str(&format!(
         "| 지표 | 값 |\n|---|---|\n| 전체 커버리지 | {} |\n| 신규 코드 커버리지 | {} |\n| 전체 중복률 | {} |\n| 신규 코드 중복률 | {} |\n| 변경 줄 차단 등급 위반 | {} |\n\n",
         pct(r.metrics.coverage), pct(r.metrics.new_coverage), pct(r.metrics.duplication), pct(r.metrics.new_duplication),
@@ -128,7 +179,7 @@ pub fn summary(r: &ScanResult, skipped: usize) -> (String, String) {
     let list = |title: &str, v: &[String], b: &mut String| {
         if v.is_empty() { return; }
         b.push_str(&format!("**{title} ({}개):** ", v.len()));
-        b.push_str(&v.iter().take(20).map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", "));
+        b.push_str(&v.iter().take(20).map(|s| esc(s)).collect::<Vec<_>>().join(", "));
         if v.len() > 20 { b.push_str(&format!(" 외 {}개", v.len() - 20)); }
         b.push_str("\n\n");
     };
@@ -247,5 +298,59 @@ mod tests {
         let quoted = format!("> {}\n\n이건 사람이 인용한 것입니다.", state_comment(&st));
         assert_eq!(parse_state(&quoted), None);
         assert!(parse_state(&format!("본문\n{}\n\n", state_comment(&st))).is_some());
+    }
+
+    #[test]
+    fn text_below_state_is_accepted_only_with_qualgate_title() {
+        let st = IssueState { key: "rule:r:a.java".into(), part: 0, items: vec![] };
+        let body = format!("표\n{}\n\n담당자가 덧붙인 글", state_comment(&st));
+        assert_eq!(parse_issue_state("[qualgate] r: a.java (1건)", &body).unwrap().key, st.key);
+        assert_eq!(parse_issue_state("사람이 만든 이슈", &body), None);
+        assert_eq!(parse_issue_state("[qualgate] 사람 글", "마커 없음"), None);
+        assert!(parse_issue_state("사람이 만든 이슈", &format!("표\n{}\n", state_comment(&st))).is_some());
+    }
+
+    #[test]
+    fn repo_text_cannot_create_markup() {
+        let msg = "hi @victim ![x](http://e/i.png) \\\\[y](http://e) <img src=x> `c` &#64;v a|b";
+        let mut r = result();
+        r.findings = vec![f("r@x", "@evil[1]`x`.java", 1, msg, Severity::Low)];
+        r.clones.clear();
+        r.unanalyzed = vec!["`@u`.py".into()];
+        let body = &desired(&r, "http://g", "o/r")[0].parts[0].body;
+        let shown = &body[..body.rfind(MARK).unwrap()];
+        let (_, sum) = summary(&r, 0);
+        let sum_shown = sum[..sum.rfind(MARK).unwrap()].replace("`abc`", "");
+        for text in [shown, sum_shown.as_str()] {
+            assert!(!text.contains('`'), "{text}");
+            assert!(!text.chars().collect::<Vec<_>>().windows(2).any(|w| w[0] == '@' && w[1].is_alphanumeric()), "{text}");
+        }
+        assert!(!shown.contains("<img") && !shown.contains("![") && !shown.contains("\\"), "{shown}");
+        assert!(!shown.contains("&#64;") && !shown.contains("a|b"), "{shown}");
+        assert!(shown.contains("&#91;1&#93;"), "{shown}");
+        // 상태에는 원문이 그대로 남는다.
+        assert_eq!(parse_state(body).unwrap().items[0].message, msg);
+    }
+
+    #[test]
+    fn links_are_percent_encoded() {
+        let mut r = result();
+        r.findings = vec![f("r", "my dir/a#b 한.java", 3, "m", Severity::Low)];
+        r.clones.clear();
+        let body = &desired(&r, "http://g", "o/r")[0].parts[0].body;
+        assert!(body.contains("http://g/o/r/src/commit/abc/my%20dir/a%23b%20%ED%95%9C.java#L3"), "{body}");
+    }
+
+    #[test]
+    fn commit_only_summary_difference_is_ignored() {
+        let r = result();
+        let (_, a) = summary(&r, 0);
+        let mut other = result();
+        other.commit = "def".into();
+        let (_, b) = summary(&other, 0);
+        assert_ne!(a, b);
+        assert!(same_except_commit(&a, &b));
+        other.metrics.coverage = Some(10.0);
+        assert!(!same_except_commit(&a, &summary(&other, 0).1));
     }
 }

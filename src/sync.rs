@@ -1,11 +1,13 @@
 use crate::gitea::{Issue, IssueApi};
 use crate::model::ScanResult;
-use crate::render::{self, parse_state, IssueState, SUMMARY_KEY};
+use crate::render::{self, parse_issue_state, IssueState, SUMMARY_KEY};
 use crate::track::track;
 use anyhow::Result;
 use std::collections::BTreeMap;
 
 pub const IGNORED_LABEL: &str = "qualgate:ignored";
+/// 항상 붙이고 이슈를 찾을 때 유일하게 쓰는 라벨. 설정의 라벨을 바꿔도 이슈를 잃지 않는다.
+pub const BASE_LABEL: &str = "qualgate";
 
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub struct SyncReport { pub created: usize, pub updated: usize, pub closed: usize, pub reopened: usize, pub skipped: usize }
@@ -18,7 +20,8 @@ fn apply_part(api: &mut dyn IssueApi, e: &Existing, title: &str, body: &str, rep
         api.edit_issue(e.issue.number, title, body, true)?;
         api.comment(e.issue.number, "같은 문제가 다시 발견되어 이슈를 다시 열었습니다.")?;
         rep.reopened += 1;
-    } else if e.issue.title != title || e.issue.body != body {
+    } else if e.issue.title != title || e.state.items != items {
+        // 링크에 커밋이 들어가 본문은 커밋마다 달라지므로 본문이 아니라 항목을 비교한다.
         api.edit_issue(e.issue.number, title, body, true)?;
         if !t.new_items.is_empty() || !t.gone.is_empty() {
             api.comment(e.issue.number, &format!("변경 사항: 신규 {}건, 해결 {}건", t.new_items.len(), t.gone.len()))?;
@@ -38,18 +41,18 @@ fn close(api: &mut dyn IssueApi, e: &Existing, why: &str, rep: &mut SyncReport) 
 }
 
 pub fn sync(api: &mut dyn IssueApi, r: &ScanResult, base_url: &str, repo: &str) -> Result<SyncReport> {
-    let labels = &r.publish.labels;
-    // 라벨이 없으면 다음 실행에서 이슈를 찾지 못해 매번 중복 생성된다.
-    let Some(primary) = labels.first().map(String::as_str) else {
-        anyhow::bail!("publish.labels가 비어 있습니다. 이슈를 찾으려면 라벨이 하나 이상 필요합니다.");
-    };
+    let mut labels = vec![BASE_LABEL.to_string()];
+    for l in &r.publish.labels {
+        if !labels.contains(l) { labels.push(l.clone()); }
+    }
+    let labels = &labels;
     for l in labels { api.ensure_label(l)?; }
     api.ensure_label(IGNORED_LABEL)?;
 
     let mut existing: BTreeMap<String, Vec<Existing>> = BTreeMap::new();
-    for issue in api.list_issues(primary)? {
+    for issue in api.list_issues(BASE_LABEL)? {
         // 상태 주석이 없는 이슈는 사람이 만든 것이므로 건드리지 않는다.
-        let Some(state) = parse_state(&issue.body) else { continue };
+        let Some(state) = parse_issue_state(&issue.title, &issue.body) else { continue };
         existing.entry(state.key.clone()).or_default().push(Existing { issue, state });
     }
     for v in existing.values_mut() { v.sort_by_key(|e| e.state.part); }
@@ -97,7 +100,7 @@ pub fn sync(api: &mut dyn IssueApi, r: &ScanResult, base_url: &str, repo: &str) 
     if !summary_ignored {
         let (title, body) = render::summary(r, rep.skipped);
         match summary_existing.as_ref().and_then(|v| v.first()) {
-            Some(e) if e.issue.title == title && e.issue.body == body && e.issue.open => {}
+            Some(e) if e.issue.title == title && render::same_except_commit(&e.issue.body, &body) && e.issue.open => {}
             Some(e) => { api.edit_issue(e.issue.number, &title, &body, true)?; rep.updated += 1; }
             None => { api.create_issue(&title, &body, labels)?; rep.created += 1; }
         }
@@ -109,14 +112,15 @@ pub fn sync(api: &mut dyn IssueApi, r: &ScanResult, base_url: &str, repo: &str) 
 mod tests {
     use super::*;
     use crate::model::*;
+    use crate::render::parse_state;
 
     #[derive(Default)]
-    struct Fake { issues: Vec<Issue>, comments: Vec<(u64, String)>, calls: usize, labels: Vec<String>, next: u64 }
+    struct Fake { issues: Vec<Issue>, comments: Vec<(u64, String)>, calls: usize, labels: Vec<String>, listed: Vec<String>, next: u64 }
 
     impl IssueApi for Fake {
         fn default_branch(&mut self) -> Result<String> { Ok("main".into()) }
         fn ensure_label(&mut self, n: &str) -> Result<()> { self.labels.push(n.into()); Ok(()) }
-        fn list_issues(&mut self, _: &str) -> Result<Vec<Issue>> { Ok(self.issues.clone()) }
+        fn list_issues(&mut self, l: &str) -> Result<Vec<Issue>> { self.listed.push(l.into()); Ok(self.issues.clone()) }
         fn create_issue(&mut self, t: &str, b: &str, l: &[String]) -> Result<u64> {
             self.calls += 1;
             self.next += 1;
@@ -299,10 +303,83 @@ mod tests {
     }
 
     #[test]
-    fn empty_label_list_is_an_error() {
+    fn new_commit_with_same_findings_makes_no_calls() {
         let mut a = Fake::default();
-        let mut r = result(vec![]);
+        let r = result(vec![f("r", "a.java", 1, Severity::High)]);
+        run(&mut a, &r);
+        a.calls = 0;
+        let mut next = r.clone();
+        next.commit = "def".into();
+        let rep = run(&mut a, &next);
+        assert_eq!(a.calls, 0);
+        assert_eq!(rep, SyncReport::default());
+    }
+
+    #[test]
+    fn summary_updates_when_metrics_or_gate_change() {
+        let mut a = Fake::default();
+        let r = result(vec![]);
+        run(&mut a, &r);
+        a.calls = 0;
+        let mut next = r.clone();
+        next.metrics.coverage = Some(42.0);
+        let rep = run(&mut a, &next);
+        assert_eq!(rep.updated, 1);
+        assert_eq!(a.calls, 1);
+        assert!(by_key(&a, SUMMARY_KEY).body.contains("42.0"));
+        let mut gate = next.clone();
+        gate.gate.passed = false;
+        assert_eq!(run(&mut a, &gate).updated, 1);
+    }
+
+    #[test]
+    fn empty_config_labels_use_the_base_label() {
+        let mut a = Fake::default();
+        let mut r = result(vec![f("r", "a.java", 1, Severity::High)]);
         r.publish.labels.clear();
-        assert!(sync(&mut a, &r, "http://g", "o/r").is_err());
+        run(&mut a, &r);
+        assert_eq!(by_key(&a, K).labels, vec![BASE_LABEL.to_string()]);
+        assert!(a.labels.contains(&BASE_LABEL.to_string()));
+    }
+
+    #[test]
+    fn config_labels_are_additive_and_changing_them_keeps_issues() {
+        let mut a = Fake::default();
+        let mut r = result(vec![f("r", "a.java", 1, Severity::High)]);
+        r.publish.labels = vec!["team-a".into(), BASE_LABEL.into()];
+        run(&mut a, &r);
+        assert_eq!(by_key(&a, K).labels, vec![BASE_LABEL.to_string(), "team-a".to_string()]);
+        a.calls = 0;
+        r.publish.labels = vec!["team-b".into()];
+        assert_eq!(run(&mut a, &r), SyncReport::default());
+        assert_eq!(a.calls, 0);
+        assert_eq!(a.listed, vec![BASE_LABEL.to_string(); 2]);
+    }
+
+    #[test]
+    fn human_text_below_state_does_not_orphan_the_issue() {
+        let mut a = Fake::default();
+        run(&mut a, &result(vec![f("r", "a.java", 1, Severity::High)]));
+        let n = by_key(&a, K).number;
+        a.issues.iter_mut().find(|i| i.number == n).unwrap().body.push_str("\n담당자 메모");
+        // 항목이 그대로면 건드리지 않는다.
+        let rep = run(&mut a, &result(vec![f("r", "a.java", 1, Severity::High)]));
+        assert_eq!(rep, SyncReport::default());
+        assert_eq!(a.issues.iter().filter(|i| i.title.contains("r: a.java")).count(), 1);
+        // 고쳐지면 같은 이슈가 닫힌다.
+        let rep = run(&mut a, &result(vec![]));
+        assert_eq!(rep.closed, 1);
+        assert!(!a.issues.iter().find(|i| i.number == n).unwrap().open);
+    }
+
+    #[test]
+    fn human_issue_quoting_state_stays_untouched() {
+        let mut a = Fake::default();
+        run(&mut a, &result(vec![f("r", "a.java", 1, Severity::High)]));
+        let state_body = by_key(&a, K).body;
+        a.next = 900;
+        a.issues.push(Issue { number: 900, title: "사람 이슈".into(), body: format!("> 인용\n{state_body}\n이어지는 글"), open: true, labels: vec![BASE_LABEL.into()] });
+        run(&mut a, &result(vec![]));
+        assert!(a.issues.iter().find(|i| i.number == 900).unwrap().open);
     }
 }
