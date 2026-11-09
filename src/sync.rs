@@ -154,7 +154,7 @@ mod tests {
             metrics: Metrics::default(), coverage_status: CoverageStatus::default(), unanalyzed: vec![],
             publish: PublishConfig { max_new_issues: 20, labels: vec!["qualgate".into()] },
             active_dirs: vec![], active_rules: vec![], gate_conditions: vec![],
-            config_source: serde_json::Value::Null, new_hotspots: vec![], new_code_measured: false,
+            config_source: serde_json::Value::Null, new_hotspots: vec![], new_code_measured: false, coverage_required_missing: false,
         }
     }
 

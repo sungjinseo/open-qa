@@ -131,6 +131,8 @@ pub struct ScanResult {
     /// 신규 코드 줄의 핫스팟. 신규 코드를 측정하지 못하면 비어 있다.
     pub new_hotspots: Vec<Finding>,
     pub new_code_measured: bool,
+    /// 프로젝트가 `coverage.required`인데 커버리지를 측정하지 못했다. `publish`가 게이트 판정에 넘긴다.
+    pub coverage_required_missing: bool,
 }
 
 #[cfg(test)]

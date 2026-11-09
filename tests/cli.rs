@@ -126,6 +126,27 @@ fn repo_config_file_is_ignored_with_warning() {
 }
 
 #[test]
+fn required_coverage_without_a_report_is_flagged_in_the_result() {
+    let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let src = repo();
+    let run = |cfg: &Path| {
+        let out = tempfile::tempdir().unwrap();
+        let o = scan_cmd(src.path(), cfg, out.path()).output().unwrap();
+        assert_eq!(o.status.code(), Some(0), "{}", String::from_utf8_lossy(&o.stderr));
+        read_result(out.path())
+    };
+    assert_eq!(run(&fixture_cfg("scan"))["coverage_required_missing"], false);
+    let cfg = config_copy();
+    let p = cfg.path().join("projects/o/r.toml");
+    let mut text = std::fs::read_to_string(&p).unwrap();
+    text.push_str("\n[coverage]\nrequired = true\n");
+    std::fs::write(&p, text).unwrap();
+    let v = run(cfg.path());
+    assert!(v["metrics"]["coverage"].is_null());
+    assert_eq!(v["coverage_required_missing"], true);
+}
+
+#[test]
 fn missing_source_json_exits_2_and_removes_old_result() {
     let _g = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let src = repo();

@@ -112,6 +112,7 @@ pub fn scan(src: &Path, config_dir: &Path, repo: &str, rules_root: &Path, opengr
     unanalyzed.sort();
     unanalyzed.dedup();
 
+    let coverage_required_missing = p.coverage.required && metrics.coverage.is_none();
     Ok(ScanResult {
         schema: SCHEMA, commit, branch,
         findings: outcome.findings,
@@ -126,5 +127,6 @@ pub fn scan(src: &Path, config_dir: &Path, repo: &str, rules_root: &Path, opengr
         config_source,
         new_hotspots,
         new_code_measured: changed.is_some(),
+        coverage_required_missing,
     })
 }
