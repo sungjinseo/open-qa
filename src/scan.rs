@@ -88,15 +88,21 @@ pub fn scan(src: &Path, config_dir: &Path, repo: &str, rules_root: &Path, opengr
 
     let changed = new_code(src, config_dir, p.new_code_days, &commit)?;
     let has_cov = !loaded.reports.is_empty();
-    let metrics = Metrics {
-        coverage: gate::coverage_pct(&loaded.map, None),
-        new_coverage: changed.as_ref().filter(|_| has_cov).and_then(|c| gate::coverage_pct(&loaded.map, Some(c))),
-        duplication: gate::duplication(&d.clones, &d.total_lines, None),
-        new_duplication: changed.as_ref().and_then(|c| gate::duplication(&d.clones, &d.total_lines, Some(c))),
+    let count = |kind: Kind, only: Option<&ChangedLines>| {
+        outcome.findings.iter().filter(|f| f.kind == kind && only.is_none_or(|c| on_lines(f, c))).count() as u64
     };
     let new_hotspots: Vec<Finding> = changed.as_ref().map_or_else(Vec::new, |c| {
         outcome.findings.iter().filter(|f| f.kind == Kind::Hotspot && on_lines(f, c)).cloned().collect()
     });
+    let metrics = Metrics {
+        new_issues: changed.as_ref().map(|c| count(Kind::Issue, Some(c))),
+        issues: count(Kind::Issue, None),
+        new_hotspots: changed.as_ref().map(|_| new_hotspots.len() as u64),
+        coverage: gate::coverage_pct(&loaded.map, None),
+        new_coverage: changed.as_ref().filter(|_| has_cov).and_then(|c| gate::coverage_pct(&loaded.map, Some(c))),
+        duplicated_lines: gate::duplication(&d.clones, &d.total_lines, None),
+        new_duplicated_lines: changed.as_ref().and_then(|c| gate::duplication(&d.clones, &d.total_lines, Some(c))),
+    };
 
     let not_in_report: Vec<String> = if has_cov {
         prod.iter().filter(|p| !loaded.map.contains_key(p.as_str())).cloned().collect()

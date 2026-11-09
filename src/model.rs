@@ -89,10 +89,15 @@ pub type CoverageMap = BTreeMap<String, BTreeMap<u32, LineCov>>;
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Metrics {
-    pub coverage: Option<f64>,
+    /// 신규 코드 줄의 이슈 종류 위반 수. 신규 코드를 측정하지 못하면 `None`.
+    pub new_issues: Option<u64>,
+    pub issues: u64,
+    /// 신규 코드 줄의 핫스팟 수. 신규 코드를 측정하지 못하면 `None`.
+    pub new_hotspots: Option<u64>,
     pub new_coverage: Option<f64>,
-    pub duplication: Option<f64>,
-    pub new_duplication: Option<f64>,
+    pub coverage: Option<f64>,
+    pub new_duplicated_lines: Option<f64>,
+    pub duplicated_lines: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]

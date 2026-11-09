@@ -181,7 +181,7 @@ pub fn summary(r: &ScanResult, skipped: usize) -> (String, String) {
     let mut b = format!("{COMMIT_LINE} `{}`\n\n", r.commit);
     b.push_str(&format!(
         "| 지표 | 값 |\n|---|---|\n| 전체 커버리지 | {} |\n| 신규 코드 커버리지 | {} |\n| 전체 중복률 | {} |\n| 신규 코드 중복률 | {} |\n\n",
-        pct(r.metrics.coverage), pct(r.metrics.new_coverage), pct(r.metrics.duplication), pct(r.metrics.new_duplication)));
+        pct(r.metrics.coverage), pct(r.metrics.new_coverage), pct(r.metrics.duplicated_lines), pct(r.metrics.new_duplicated_lines)));
     let list = |title: &str, v: &[String], b: &mut String| {
         if v.is_empty() { return; }
         b.push_str(&format!("**{title} ({}개):** ", v.len()));

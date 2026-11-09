@@ -105,6 +105,8 @@ fn scan_uses_config_dir_ruleset_and_overrides() {
     assert_eq!(v["unanalyzed"], serde_json::json!([]));
     assert!(v["metrics"]["coverage"].is_null());
     assert!(v["metrics"].get("new_blocking").is_none());
+    // 이슈는 exec 한 건(신규 줄), 핫스팟은 print 한 건(신규 줄).
+    assert_eq!((v["metrics"]["new_issues"].clone(), v["metrics"]["issues"].clone(), v["metrics"]["new_hotspots"].clone()), (1.into(), 1.into(), 1.into()));
 }
 
 #[test]
@@ -177,7 +179,7 @@ fn shallow_clone_uses_newcode_json_only_for_the_same_head() {
     let v = run("0000000000000000000000000000000000000000");
     assert_eq!(v["new_code_measured"], false);
     assert_eq!(v["new_hotspots"], serde_json::json!([]));
-    assert!(v["metrics"]["new_duplication"].is_null());
+    assert!(v["metrics"]["new_duplicated_lines"].is_null());
 }
 
 #[test]
