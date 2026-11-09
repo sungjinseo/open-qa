@@ -15,6 +15,8 @@
 ### 대상 환경
 
 - Gitea: `https://gitea.180-210-89-135.nip.io` (1.26.4). 인증서를 사내 CA(`NND Internal CA`)가 발급하므로 엔진은 추가 CA 인증서를 신뢰할 수 있어야 한다(5.4).
+- 테스트 조직: `jenny`. 파이프라인 실행 계정: `cicdbot`.
+- Tekton: 공통 Task는 `tekton-catalog` 네임스페이스, cluster resolver로 참조. 이미지는 `{{image_registry}}/nnd/tekton-cicd/` 아래에 둔다.
 
 ## 2. 구성
 
@@ -180,47 +182,68 @@ labels = []
 
 ## 5. Tekton Task
 
+기존 공통 빌드 파이프라인(`build-common-image-gitops`)의 `code-analysis` 자리(현재 `sonarqube-scanner-env`)를 대신하는 Task로 만든다. 다른 공통 Task처럼 `tekton-catalog` 네임스페이스에 등록하고 cluster resolver로 참조한다.
+
 ```yaml
 apiVersion: tekton.dev/v1
 kind: Task
 metadata:
   name: qualgate
+  namespace: tekton-catalog
 spec:
   params:
-    - name: repo            # owner/name
-    - name: branch          # 스캔한 브랜치
-    - name: gitea-url
-    - name: config-repo
-      default: qa/rulesets
-    - name: config-ref
+    - name: IMAGE                 # {{image_registry}}/nnd/tekton-cicd/qualgate:<ver>
+    - name: CONTEXT_DIR           # $(params.working-pr-dir)/$(params.code-repo-name)
+    - name: GIT_HOST_URL          # $(params.git-host-url)
+    - name: REPO_ORG              # $(params.code-repo-org)
+    - name: REPO_NAME             # $(params.code-repo-name)
+    - name: REVISION              # $(params.code-revision) - 스캔한 브랜치
+    - name: CONFIG_REPO           # 설정 저장소, 예: jenny/qualgate-config
+    - name: CONFIG_REF
       default: main
+    - name: CRT_FILENAME
+      default: ca-certificates.crt
   workspaces:
-    - name: source
-      readOnly: true
+    - name: source                # shared-data
+    - name: basic-auth            # gitconfig (cicdbot 자격 증명)
+    - name: ssl-ca-directory      # 사내 CA
   results:
-    - name: gate            # passed | failed
+    - name: gate                  # passed | failed
   volumes:
     - name: work
       emptyDir: {}
   steps:
     - name: fetch-config
-      image: qualgate:<ver>
-      env: GITEA_URL, GITEA_TOKEN(읽기 Secret)
-      args: [fetch-config, --repo, $(params.repo), --config-repo, $(params.config-repo), --ref, $(params.config-ref), --out, /work/config]
+      image: $(params.IMAGE)
+      args: [fetch-config, --repo, $(params.REPO_ORG)/$(params.REPO_NAME), --config-repo, $(params.CONFIG_REPO), --ref, $(params.CONFIG_REF), --out, /work/config]
     - name: scan
-      image: qualgate:<ver>
-      env: QUALGATE_BRANCH=$(params.branch)
-      args: [scan, --src, $(workspaces.source.path), --config, /work/config, --out, /work/out]
+      image: $(params.IMAGE)
+      args: [scan, --src, $(workspaces.source.path)/$(params.CONTEXT_DIR), --config, /work/config, --out, /work/out]
     - name: publish
-      image: qualgate:<ver>
-      env: GITEA_URL, GITEA_TOKEN(쓰기 Secret)
-      args: [publish, --repo, $(params.repo), --out, /work/out, --gate-result, $(results.gate.path)]
+      image: $(params.IMAGE)
+      args: [publish, --repo, $(params.REPO_ORG)/$(params.REPO_NAME), --out, /work/out, --gate-result, $(results.gate.path)]
 ```
 
-- 실제 YAML은 `deploy/tekton/task.yaml`로 제공하고, Secret 이름은 파라미터로 받는다.
-- `scan` 단계에는 토큰 환경 변수를 주지 않는다. 같은 Pod라 네트워크는 공유되므로, 네트워크 격리가 필요하면 클러스터 NetworkPolicy로 건다. README에 명시한다.
-- 소스 workspace는 읽기 전용이어도 동작해야 한다.
-- 신규 코드 계산에는 git 이력이 필요하다. 앞 Task가 얕은 클론이면 신규 코드 지표는 측정 안 됨이 된다. README에 깊이 권장값을 적는다.
+- 실제 YAML은 `deploy/tekton/task-qualgate.yaml`로 제공한다. 이미지와 주소는 기존 템플릿처럼 `{{image_registry}}`, `{{gitea_domain}}` 자리표시자를 쓴다.
+- `fetch-config`와 `publish`는 `GITEA_URL=$(params.GIT_HOST_URL)`, `QUALGATE_CA_FILE=$(workspaces.ssl-ca-directory.path)/$(params.CRT_FILENAME)`, `QUALGATE_GIT_CREDENTIALS=$(workspaces.basic-auth.path)/.git-credentials`를 받는다. `scan`에는 이 변수들을 주지 않고 `QUALGATE_BRANCH=$(params.REVISION)`만 준다.
+- 한계: Tekton에서 workspace는 Task의 모든 단계에 마운트되므로 `scan` 단계도 자격 증명 파일 경로에 접근할 수는 있다. 환경 변수로 넘기지 않는 것까지만 분리한다. 같은 Pod라 네트워크도 공유된다. README에 명시한다.
+- 소스 workspace에 쓰지 않는다. 결과와 설정은 `emptyDir`(`/work`)에만 쓴다.
+
+### 5.0 파이프라인 연결
+
+`deploy/tekton/pipeline-patch.md`에 기존 파이프라인을 바꾸는 방법을 적는다.
+
+1. `code-analysis`의 `taskRef` 이름을 `qualgate`로 바꾸고 위 파라미터·workspace(`shared-data`, `gitconfig`, `ssl-ca-directory`)를 연결한다. `runAfter: [code-test]`는 유지해 커버리지 리포트를 읽는다.
+2. `failure-issue-skip-tasks`에 `code-analysis`를 넣는다. qualgate가 자세한 이슈를 올리므로 실패 이슈 Task가 같은 실패를 중복으로 올리지 않게 한다.
+3. `code-fetch`(git-clone)에 `depth` 파라미터를 준다. 기본값 1(얕은 클론)이면 신규 코드 지표를 측정할 수 없어 게이트가 건너뛰어진다. 권장값은 `0`(전체 이력) 또는 신규 코드 기간을 덮는 충분한 값.
+4. 품질 게이트 실패로 파이프라인을 멈출지는 기존 `sonar-qualitygate-wait`처럼 파이프라인 파라미터 `qualgate-fail-on-gate`(기본 `true`)로 정한다. `false`면 `publish`가 게이트 실패에도 종료 코드 0을 내고 결과(`gate`)에만 `failed`를 남긴다.
+
+### 5.0.1 Gitea 인증
+
+- `QUALGATE_GIT_CREDENTIALS`(git-clone의 `basic-auth` workspace에 있는 `.git-credentials`)에서 `GITEA_URL`과 호스트가 같은 줄을 찾아 사용자·비밀번호로 Basic 인증한다.
+- `GITEA_TOKEN`이 있으면 그것을 우선한다(로컬 실행과 테스트용).
+- 둘 다 없으면 종료 코드 2. 자격 증명 값은 로그에 쓰지 않는다.
+- 필요한 권한: 설정 저장소 읽기, 대상 저장소의 이슈·라벨 쓰기와 저장소 읽기. 현재 `cicdbot` 계정을 쓴다.
 
 ### 5.1 `fetch-config`
 
@@ -239,6 +262,7 @@ spec:
 ### 5.3 `publish`
 
 - `schema = 2`가 아니면 종료 코드 2.
+- `--fail-on-gate false`면 게이트 실패에도 종료 코드 0을 내고 결과 파일에만 `failed`를 쓴다(5.0의 4).
 - 대상 저장소의 qualgate 이슈를 읽어 핫스팟 검토 상태를 계산한다.
   - 핫스팟이 `qualgate:safe` 라벨이 붙은 이슈의 항목과 지문으로 일치하면 검토됨.
 - 조건 목록으로 게이트를 판정하고 `--gate-result` 파일에 `passed` 또는 `failed`를 쓴다. 종료 코드는 통과 0, 실패 1, 오류 2.
@@ -252,7 +276,7 @@ spec:
 ### 5.4 사내 CA 인증서
 
 - `QUALGATE_CA_FILE` 환경 변수로 PEM 파일(여러 인증서 가능)을 받아, 시스템 인증서에 더해 신뢰한다. Gitea에 접속하는 `fetch-config`와 `publish`에 적용한다.
-- Tekton에서는 CA를 ConfigMap이나 Secret으로 마운트하고 이 변수로 경로를 넘긴다. Task 예시에 넣는다.
+- Tekton에서는 기존 파이프라인의 `ssl-ca-directory` workspace에 있는 `ca-certificates.crt`를 쓴다.
 - 인증서 검증을 끄는 옵션은 만들지 않는다.
 - 파일을 읽지 못하거나 PEM이 아니면 종료 코드 2.
 
@@ -296,12 +320,13 @@ spec:
 - **스캐너 통합:** 설정 디렉터리를 쓰는 `scan`, 룰셋에서 끈 규칙이 실행되지 않음, 오버라이드된 등급·종류가 결과에 반영됨, `.qualgate.toml` 무시.
 - **publish:** 가짜 API로 게이트 판정, 핫스팟 `qualgate:safe` 처리, 끈 규칙의 이슈가 "룰셋에서 제외" 코멘트로 닫힘, 비기본 브랜치에서 판정만 함.
 - **Gitea 통합:** 기존 `tests/gitea_it.sh`(로컬 Gitea 컨테이너) 확장. 설정 저장소를 만들고 `fetch-config → scan → publish`를 실행해 이슈 생성, 핫스팟 검토 후 게이트 통과, 룰셋 변경 반영을 확인.
-- **대상 Gitea 확인:** `https://gitea.180-210-89-135.nip.io`에 사용자가 지정한 테스트 조직에서 같은 흐름을 한 번 실행한다(사내 CA 포함). 사용자가 토큰과 CA 인증서를 제공한 뒤에만 실행한다.
+- **대상 Gitea 확인:** `jenny` 조직에 테스트용 설정 저장소와 대상 저장소를 만들어 `fetch-config → scan → publish`를 로컬 컨테이너에서 한 번 실행한다. 사내 CA 인증서 파일을 받은 뒤에 실행하며, 인증서 검증은 끄지 않는다. 자격 증명은 저장소나 문서에 쓰지 않는다.
+- **Tekton:** `deploy/tekton/*.yaml`의 YAML 구조 검사. 클러스터 등록과 실제 PipelineRun은 클러스터 연결 후 진행한다.
 - **설정 도구:** `validate-config`가 각 오류 종류를 파일·위치와 함께 보고, `init-config` 결과가 그대로 검증을 통과함, `catalog --json` 형식.
 - **Tekton:** `deploy/tekton/task.yaml`이 스키마상 유효한지 확인(kind/Tekton이 없으면 YAML 구조 검사). 실제 클러스터 실행은 사용자 환경에서 확인할 항목으로 README에 적는다.
 
 ## 10. 구현 전 확인할 사항
 
 1. 대상 Gitea(1.26.4)의 파일 API로 설정 파일 읽기, 이슈·라벨 API 동작.
-2. 사내 Tekton 버전(`tekton.dev/v1` 지원 여부, step에서 `results` 경로 사용).
-3. 앞 Task(git clone)의 클론 깊이.
+2. 클러스터 연결 후: `tekton-catalog`에 Task 등록, `ssl-ca-directory`·`gitconfig` workspace 형식(`.git-credentials` 파일 이름과 줄 형식) 확인.
+3. `code-fetch`의 클론 깊이 변경 가능 여부(5.0의 3).
