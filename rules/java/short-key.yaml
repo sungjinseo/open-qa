@@ -2,11 +2,15 @@ rules:
   - id: java.short-key
     languages: [java]
     severity: WARNING
-    message: "[행안부 SF-07 충분하지 않은 키 길이 사용] RSA 키가 2048비트 미만이거나 대칭키가 112비트 미만입니다. 현재 컴퓨팅 능력으로 해독될 수 있습니다. RSA 2048 이상(권장 3072), AES 128 이상을 쓰세요."
+    message: "[행안부 SF-07 충분하지 않은 키 길이 사용] RSA·DSA·DH 키 길이가 2048비트 미만입니다. 현재 컴퓨팅 능력으로 해독될 수 있습니다. 2048비트 이상(권장 3072)을 쓰세요."
     patterns:
-      - pattern-either:
-          - pattern: (KeyPairGenerator $G).initialize($N)
-          - pattern: $G.initialize($N)
+      - pattern-inside: |
+          KeyPairGenerator $G = KeyPairGenerator.getInstance("$ALG");
+          ...
+      - pattern: $G.initialize($N)
+      - metavariable-regex:
+          metavariable: $ALG
+          regex: ^(RSA|DSA|DH|DiffieHellman)$
       - metavariable-comparison:
           metavariable: $N
           comparison: $N < 2048

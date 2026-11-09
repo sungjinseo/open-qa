@@ -2,12 +2,21 @@ rules:
   - id: java.catch-throwable
     languages: [java]
     severity: INFO
-    message: "[행안부 EH-03 부적절한 예외 처리] Throwable·Exception 같은 광범위한 예외를 한꺼번에 잡습니다. OutOfMemoryError까지 삼키거나 서로 다른 오류를 같은 방식으로 처리하게 됩니다. 처리할 수 있는 구체적인 예외 타입만 잡으세요."
-    pattern-either:
-      - pattern: |
-          try { ... } catch (Throwable $E) { ... }
-      - pattern: |
-          try { ... } catch (Exception $E) { ... }
+    message: "[행안부 EH-03 부적절한 예외 처리] Throwable·Exception 같은 광범위한 예외를 한꺼번에 잡고 다시 던지지도 로깅하지도 않습니다. OutOfMemoryError까지 삼키거나 서로 다른 오류를 같은 방식으로 처리하게 됩니다. 처리할 수 있는 구체적인 예외 타입만 잡으세요."
+    patterns:
+      - pattern-either:
+          - pattern: |
+              try { ... } catch (Throwable $E) { ... }
+          - pattern: |
+              try { ... } catch (Exception $E) { ... }
+      - pattern-not: |
+          try { ... } catch ($T $E) { ... throw $X; ... }
+      - pattern-not: |
+          try { ... } catch ($T $E) { ... $LOG.error(...); ... }
+      - pattern-not: |
+          try { ... } catch ($T $E) { ... $LOG.warn(...); ... }
+      - pattern-not: |
+          try { ... } catch ($T $E) { ... $LOG.log(...); ... }
     metadata:
       qualgate_id: java.catch-throwable
       qualgate_severity: low
