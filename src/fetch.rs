@@ -37,15 +37,25 @@ pub struct FetchRequest {
     pub now: SystemTime,
 }
 
+/// 경고를 stderr에 출력한다.
+pub fn warn_stderr(m: String) { eprintln!("경고: {m}"); }
+
 /// 설정을 받아 검증하고 `out`에 쓴다. 검증이 끝나기 전에는 `out`에 아무것도 쓰지 않는다.
 /// 신규 코드 계산 실패는 경고만 하고 `newcode.json`을 쓰지 않는다(신규 코드 측정 안 됨).
 pub fn fetch(cfg: &mut dyn ConfigSource, hist: Option<&mut dyn HistorySource>, req: &FetchRequest, catalog: &Catalog, out: &Path) -> Result<()> {
+    fetch_with(cfg, hist, req, catalog, out, &mut warn_stderr)
+}
+
+/// `fetch`와 같고, 경고를 `warn`으로 보낸다.
+pub fn fetch_with(cfg: &mut dyn ConfigSource, hist: Option<&mut dyn HistorySource>, req: &FetchRequest, catalog: &Catalog, out: &Path,
+                  warn: &mut dyn FnMut(String)) -> Result<()> {
     ensure_empty(out)?;
     if !settings::valid_repo(&req.repo) { bail!("저장소 이름은 owner/repo 형식이어야 합니다: {}", req.repo); }
     if let Some(c) = &req.commit {
-        // scan은 newcode.json의 head를 전체 커밋 sha와 비교한다. 짧은 sha나 옵션처럼 보이는 값은 받지 않는다.
-        if !matches!(c.len(), 40 | 64) || !c.bytes().all(|b| b.is_ascii_hexdigit()) {
-            bail!("--commit은 전체 커밋 sha(16진수 40자 또는 64자)여야 합니다: {c}");
+        // scan은 newcode.json의 head를 `git rev-parse HEAD`(소문자 전체 sha)와 비교한다.
+        // 짧은 sha, 대문자, 옵션처럼 보이는 값은 받지 않는다(CLI는 소문자로 바꿔 넘긴다).
+        if !matches!(c.len(), 40 | 64) || !c.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+            bail!("--commit은 전체 커밋 sha(소문자 16진수 40자 또는 64자)여야 합니다: {c}");
         }
     }
 
@@ -65,7 +75,12 @@ pub fn fetch(cfg: &mut dyn ConfigSource, hist: Option<&mut dyn HistorySource>, r
     }
     if let Some(p) = project { files.push((project_file, p)); }
 
-    let stage = tempfile::tempdir().context("임시 디렉터리 생성 실패")?;
+    // `out`과 같은 상위 디렉터리에 모두 쓴 뒤 이름을 바꿔 한 번에 내놓는다. 도중에 실패하면 임시
+    // 디렉터리는 drop될 때 지워지고 `out`은 그대로다.
+    let parent = match out.parent() { Some(p) if !p.as_os_str().is_empty() => p, _ => Path::new(".") };
+    std::fs::create_dir_all(parent).with_context(|| format!("{} 생성 실패", parent.display()))?;
+    let stage = tempfile::Builder::new().prefix(".qualgate-fetch-").tempdir_in(parent)
+        .with_context(|| format!("{}에 임시 디렉터리를 만들지 못했습니다", parent.display()))?;
     write_files(stage.path(), &files)?;
     let res = settings::resolve(stage.path(), &req.repo, catalog).map_err(|errs| {
         anyhow!("설정 오류 {}건 (설정 저장소 {}, 커밋 {config_commit}):\n{}", errs.len(), req.config_repo,
@@ -75,7 +90,7 @@ pub fn fetch(cfg: &mut dyn ConfigSource, hist: Option<&mut dyn HistorySource>, r
     let newcode = match (&req.commit, hist) {
         (Some(c), Some(h)) => {
             let until = rfc3339(req.now.checked_sub(DAY * res.project.new_code_days).unwrap_or(UNIX_EPOCH));
-            new_code(h, c, &until)
+            new_code(h, c, &until).map_err(|m| warn(format!("{m}. 신규 코드는 측정하지 않습니다(scan이 git 이력으로 계산할 수 있으면 그 값을 씁니다)"))).ok()
         }
         _ => None,
     };
@@ -84,9 +99,10 @@ pub fn fetch(cfg: &mut dyn ConfigSource, hist: Option<&mut dyn HistorySource>, r
         "config_repo": req.config_repo, "ref": req.git_ref, "config_commit": config_commit,
         "repo": req.repo, "branch": req.branch, "registered": res.registered,
     });
-    files.push(("source.json".into(), serde_json::to_vec_pretty(&source)?));
-    if let Some(n) = newcode { files.push(("newcode.json".into(), serde_json::to_vec_pretty(&n)?)); }
-    write_files(out, &files)
+    let mut extra = vec![("source.json".to_string(), serde_json::to_vec_pretty(&source)?)];
+    if let Some(n) = newcode { extra.push(("newcode.json".into(), serde_json::to_vec_pretty(&n)?)); }
+    write_files(stage.path(), &extra)?;
+    publish_dir(stage, out)
 }
 
 fn ensure_empty(out: &Path) -> Result<()> {
@@ -95,6 +111,19 @@ fn ensure_empty(out: &Path) -> Result<()> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
         Err(e) => return Err(e).with_context(|| format!("출력 디렉터리를 읽을 수 없습니다: {}", out.display())),
     }
+    Ok(())
+}
+
+/// 완성된 임시 디렉터리를 `out` 이름으로 바꾼다. 빈 `out`이 있으면 먼저 지운다(비어 있지 않으면 실패).
+fn publish_dir(stage: tempfile::TempDir, out: &Path) -> Result<()> {
+    match std::fs::remove_dir(out) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e).with_context(|| format!("출력 디렉터리를 바꿀 수 없습니다(비어 있어야 합니다): {}", out.display())),
+    }
+    std::fs::rename(stage.path(), out).with_context(|| format!("{} 쓰기 실패", out.display()))?;
+    // 이름을 바꿨으므로 drop이 지울 것이 없다.
+    let _ = stage.keep();
     Ok(())
 }
 
@@ -116,20 +145,17 @@ fn ruleset_name(global: &[u8], project: Option<&[u8]>) -> Option<String> {
     match project { Some(p) => key(p, "ruleset"), None => key(global, "default_ruleset") }
 }
 
-fn new_code(h: &mut dyn HistorySource, commit: &str, until: &str) -> Option<NewCodeFile> {
-    let warn = |m: String| eprintln!("경고: {m}. 신규 코드는 측정하지 않습니다(scan이 git 이력으로 계산할 수 있으면 그 값을 씁니다).");
+/// 신규 코드 범위. 계산할 수 없으면 경고 문구.
+fn new_code(h: &mut dyn HistorySource, commit: &str, until: &str) -> std::result::Result<NewCodeFile, String> {
     let base = match h.commit_before(until) {
         Ok(Some(b)) => b,
-        Ok(None) => { warn(format!("기준 시각 {until} 이전 커밋을 받은 이력에서 찾지 못했습니다")); return None; }
-        Err(e) => { warn(format!("신규 코드 기준 커밋을 찾지 못했습니다: {e:#}")); return None; }
+        Ok(None) => return Err(format!("기준 시각 {until} 이전 커밋을 받은 이력에서 찾지 못했습니다")),
+        Err(e) => return Err(format!("신규 코드 기준 커밋을 찾지 못했습니다: {e:#}")),
     };
-    let diff = match h.diff(&base, commit) {
-        Ok(d) => d,
-        Err(e) => { warn(format!("{base}..{commit} diff를 계산하지 못했습니다: {e:#}")); return None; }
-    };
+    let diff = h.diff(&base, commit).map_err(|e| format!("{base}..{commit} diff를 계산하지 못했습니다: {e:#}"))?;
     let (lines, quoted) = newcode::parse_diff_ex(&diff);
-    if quoted { warn("따옴표로 감싼 파일 경로가 있어 변경 줄을 파일에 연결할 수 없습니다".into()); return None; }
-    Some(NewCodeFile { base, head: commit.to_string(), files: lines.into_iter().map(|(f, s)| (f, s.into_iter().collect())).collect() })
+    if quoted { return Err("따옴표로 감싼 파일 경로가 있어 변경 줄을 파일에 연결할 수 없습니다".into()); }
+    Ok(NewCodeFile { base, head: commit.to_string(), files: lines.into_iter().map(|(f, s)| (f, s.into_iter().collect())).collect() })
 }
 
 // --- RFC3339 (UTC, `YYYY-MM-DDTHH:MM:SSZ`) ---
@@ -216,26 +242,40 @@ impl GitHistory {
         GitHistory { url, branch, commit, dir, env, cloned: false }
     }
 
-    fn clone_with(&self, limit: &str) -> Result<()> {
+    /// 원격과 통신하는 git. 인증 환경(`GitEnv`)을 적용하고 `GITEA_TOKEN`은 넘기지 않는다.
+    /// 실패하면 git의 stderr(자격 증명이 없는 URL만 담긴다).
+    fn remote_git<I, S>(&self, args: I) -> std::result::Result<(), String>
+    where I: IntoIterator<Item = S>, S: AsRef<std::ffi::OsStr> {
         let mut cmd = Command::new("git");
         cmd.env_remove("GITEA_TOKEN").stdin(Stdio::null());
         self.env.apply(&mut cmd);
-        cmd.args(["clone", "--quiet", "--bare", "--single-branch", "--no-tags", "--branch", &self.branch, limit, "--", &self.url]).arg(&self.dir);
-        let o = cmd.output().context("git 실행 실패")?;
-        if !o.status.success() {
-            bail!("{} (브랜치 {}) 이력을 받지 못했습니다: {}", self.url, self.branch, String::from_utf8_lossy(&o.stderr).trim());
-        }
-        Ok(())
+        let o = cmd.args(args).output().map_err(|e| format!("git 실행 실패: {e}"))?;
+        if o.status.success() { Ok(()) } else { Err(String::from_utf8_lossy(&o.stderr).trim().to_string()) }
     }
 
     fn clone(&self, since: &str) -> Result<()> {
         if let Some(p) = self.dir.parent() { std::fs::create_dir_all(p).with_context(|| format!("{} 생성 실패", p.display()))?; }
-        match self.clone_with(&format!("--shallow-since={since}")) {
-            Ok(()) => Ok(()),
-            // 기간 안에 커밋이 하나도 없으면 git이 클론을 거부한다. 그때는 최신 커밋 하나만 받는다
+        let dir = self.dir.as_os_str();
+        let clone = |limit: &str| {
+            let mut args = ["clone", "--quiet", "--bare", "--single-branch", "--no-tags", "--branch", &self.branch, limit, "--", &self.url]
+                .map(std::ffi::OsStr::new).to_vec();
+            args.push(dir);
+            self.remote_git(args)
+        };
+        let fail = |m: &str| anyhow!("{} (브랜치 {}) 이력을 받지 못했습니다: {m}", self.url, self.branch);
+        if let Err(first) = clone(&format!("--shallow-since={since}")) {
+            // 기간 안에 커밋이 하나도 없으면 git이 클론을 거부한다. 그때만 최신 커밋 하나를 받는다
             // (그 커밋이 기준 시각 이전이면 기준 커밋 = HEAD, 신규 코드 없음).
-            Err(e) => self.clone_with("--depth=1").map_err(|_| e),
+            if !first.contains("no commits selected for shallow requests") { return Err(fail(&first)); }
+            clone("--depth=1").map_err(|second| fail(&format!("{first}; --depth=1 재시도도 실패했습니다: {second}")))?;
         }
+        if self.dir.join("shallow").exists() {
+            // 경계 커밋의 부모(기간 밖에 있는 실제 기준 커밋)까지 받는다.
+            let args = [std::ffi::OsStr::new("-C"), dir].into_iter()
+                .chain(["fetch", "--quiet", "--no-tags", "--deepen=1", "origin", &self.branch].map(std::ffi::OsStr::new));
+            self.remote_git(args).map_err(|e| anyhow!("{} (브랜치 {}) 이력을 한 단계 더 받지 못했습니다: {e}", self.url, self.branch))?;
+        }
+        Ok(())
     }
 }
 
@@ -249,7 +289,8 @@ impl HistorySource for GitHistory {
         if newcode::git(&self.dir, &["cat-file", "-e", &format!("{}^{{commit}}", self.commit)]).is_err() {
             bail!("커밋 {}이(가) 받은 브랜치 {} 이력에 없습니다", self.commit, self.branch);
         }
-        let base = newcode::git(&self.dir, &["rev-list", "-1", &format!("--before={until}"), &self.commit, "--"])?;
+        // 병합된 곁가지 커밋을 기준으로 고르지 않도록 첫 부모만 따라간다(newcode::changed와 같다).
+        let base = newcode::git(&self.dir, &["rev-list", "-1", "--first-parent", &format!("--before={until}"), &self.commit, "--"])?;
         let base = base.trim();
         Ok(if base.is_empty() { None } else { Some(base.to_string()) })
     }
@@ -328,6 +369,18 @@ mod tests {
         fetch(cfg, hist.map(|h| h as &mut dyn HistorySource), r, &catalog(), out)
     }
 
+    /// 성공해야 하는 실행. 경고 목록을 돌려준다.
+    fn run_ok(cfg: &mut FakeConfig, hist: &mut FakeHistory, r: &FetchRequest, out: &Path) -> Vec<String> {
+        let mut warnings = vec![];
+        fetch_with(cfg, Some(hist), r, &catalog(), out, &mut |m| warnings.push(m)).unwrap();
+        warnings
+    }
+
+    /// 상위 디렉터리에 임시 디렉터리(.qualgate-fetch-*)가 남지 않았는지.
+    fn no_stage_left(parent: &Path) -> bool {
+        std::fs::read_dir(parent).unwrap().all(|e| !e.unwrap().file_name().to_string_lossy().starts_with(".qualgate-fetch-"))
+    }
+
     fn files_in(dir: &Path) -> Vec<String> {
         let mut v: Vec<String> = walkdir::WalkDir::new(dir).into_iter().map(|e| e.unwrap()).filter(|e| e.file_type().is_file())
             .map(|e| e.path().strip_prefix(dir).unwrap().to_string_lossy().replace('\\', "/")).collect();
@@ -351,6 +404,7 @@ mod tests {
         assert!(!cfg.requested.contains(&"rulesets/std.toml".to_string()), "only the used ruleset is fetched");
         // 받은 설정은 scan과 같은 방법으로 읽힌다.
         assert!(crate::settings::resolve(&out, "o/r", &catalog()).unwrap().registered);
+        assert!(no_stage_left(t.path()));
     }
 
     #[test]
@@ -376,6 +430,7 @@ mod tests {
         std::fs::create_dir(&out).unwrap();
         assert!(run(&mut cfg, None, &req("o/r", None), &out).is_err());
         assert_eq!(files_in(&out), Vec::<String>::new());
+        assert!(no_stage_left(t.path()));
     }
 
     #[test]
@@ -409,6 +464,9 @@ mod tests {
         let t = tempfile::tempdir().unwrap();
         assert!(run(&mut standard(), None, &req("../r", None), &t.path().join("a")).is_err());
         assert!(run(&mut standard(), None, &req("o/r", Some("--upload-pack=x")), &t.path().join("b")).is_err());
+        // newcode.json의 head는 git rev-parse 출력(소문자)과 비교되므로 대문자는 받지 않는다.
+        assert!(run(&mut standard(), None, &req("o/r", Some(&COMMIT.to_ascii_uppercase())), &t.path().join("c")).is_err());
+        assert!(run(&mut standard(), None, &req("o/r", Some(&COMMIT[..12])), &t.path().join("d")).is_err());
     }
 
     #[test]
@@ -416,7 +474,7 @@ mod tests {
         let t = tempfile::tempdir().unwrap();
         let out = t.path().join("out");
         let mut h = history(Base::Found("b0"), "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1,0 +2,2 @@\n+x\n+y\n@@ -5 +8 @@\n-q\n+w\n");
-        run(&mut standard(), Some(&mut h), &req("o/r", Some(COMMIT)), &out).unwrap();
+        assert_eq!(run_ok(&mut standard(), &mut h, &req("o/r", Some(COMMIT)), &out), Vec::<String>::new());
         // 기준 시각 = now - new_code_days(10)
         assert_eq!(h.untils, vec!["2023-11-04T22:13:20Z".to_string()]);
         assert_eq!(json(&out.join("newcode.json")), serde_json::json!({"base": "b0", "head": COMMIT, "files": {"a.py": [2, 3, 8]}}));
@@ -428,26 +486,30 @@ mod tests {
     fn no_base_commit_means_no_newcode_json() {
         let t = tempfile::tempdir().unwrap();
         let out = t.path().join("out");
-        run(&mut standard(), Some(&mut history(Base::Missing, "")), &req("o/r", Some(COMMIT)), &out).unwrap();
+        let w = run_ok(&mut standard(), &mut history(Base::Missing, ""), &req("o/r", Some(COMMIT)), &out);
         assert!(out.join("source.json").exists());
         assert!(!out.join("newcode.json").exists());
+        assert!(w.len() == 1 && w[0].contains("2023-11-04T22:13:20Z") && w[0].contains("측정하지 않습니다"), "{w:?}");
     }
 
     #[test]
     fn history_errors_only_warn() {
         let t = tempfile::tempdir().unwrap();
         let out = t.path().join("a");
-        run(&mut standard(), Some(&mut history(Base::Fails, "")), &req("o/r", Some(COMMIT)), &out).unwrap();
+        let w = run_ok(&mut standard(), &mut history(Base::Fails, ""), &req("o/r", Some(COMMIT)), &out);
         assert!(out.join("source.json").exists() && !out.join("newcode.json").exists());
+        assert!(w.len() == 1 && w[0].contains("history api down") && w[0].contains("측정하지 않습니다"), "{w:?}");
         let out = t.path().join("b");
         let mut h = FakeHistory { base: Base::Found("b0"), diff: Err("diff failed".into()), untils: vec![] };
-        run(&mut standard(), Some(&mut h), &req("o/r", Some(COMMIT)), &out).unwrap();
+        let w = run_ok(&mut standard(), &mut h, &req("o/r", Some(COMMIT)), &out);
         assert!(out.join("source.json").exists() && !out.join("newcode.json").exists());
+        assert!(w.len() == 1 && w[0].contains("diff failed"), "{w:?}");
         // 따옴표 경로는 줄을 파일에 연결할 수 없어 측정하지 않는다.
         let out = t.path().join("c");
         let mut h = history(Base::Found("b0"), "--- a/a\n+++ \"b/q\\\"x\"\n@@ -0,0 +1 @@\n+z\n");
-        run(&mut standard(), Some(&mut h), &req("o/r", Some(COMMIT)), &out).unwrap();
+        let w = run_ok(&mut standard(), &mut h, &req("o/r", Some(COMMIT)), &out);
         assert!(!out.join("newcode.json").exists());
+        assert!(w.len() == 1 && w[0].contains("따옴표"), "{w:?}");
     }
 
     #[test]
@@ -481,12 +543,12 @@ mod tests {
         String::from_utf8(o.stdout).unwrap().trim().to_string()
     }
 
-    /// 2026-01-01(줄 1), 2026-01-09T18:00Z(줄 2), 2026-01-11(줄 3, HEAD) 커밋. (커밋 sha 세 개)
-    fn source_repo() -> (tempfile::TempDir, [String; 3]) {
+    /// 2025-12-01(줄 1), 2026-01-01(줄 2), 2026-01-09T18:00Z(줄 3), 2026-01-11(줄 4, HEAD) 커밋의 sha.
+    fn source_repo() -> (tempfile::TempDir, [String; 4]) {
         let d = tempfile::tempdir().unwrap();
-        git(d.path(), &["init", "-qb", "main"], "2026-01-01T00:00:00Z");
+        git(d.path(), &["init", "-qb", "main"], "2025-12-01T00:00:00Z");
         let mut shas = vec![];
-        for (i, date) in ["2026-01-01T00:00:00Z", "2026-01-09T18:00:00Z", "2026-01-11T00:00:00Z"].iter().enumerate() {
+        for (i, date) in ["2025-12-01T00:00:00Z", "2026-01-01T00:00:00Z", "2026-01-09T18:00:00Z", "2026-01-11T00:00:00Z"].iter().enumerate() {
             let body: String = (1..=i + 1).map(|n| format!("{n}\n")).collect();
             std::fs::write(d.path().join("a.txt"), body).unwrap();
             git(d.path(), &["add", "-A"], date);
@@ -500,37 +562,80 @@ mod tests {
         GitHistory::new(format!("file://{}", src.display()), "main".into(), commit.into(), work.join("history"), GitEnv::empty())
     }
 
-    #[test]
-    fn git_history_clones_shallow_and_diffs() {
-        let (src, [c1, c2, c3]) = source_repo();
-        let work = tempfile::tempdir().unwrap();
-        let mut h = git_history(src.path(), &c3, work.path());
-        assert_eq!(h.commit_before("2026-01-10T12:00:00Z").unwrap(), Some(c2.clone()));
-        // --shallow-since=기준 시각 - 1일: 2026-01-01 커밋은 받지 않는다.
-        assert!(work.path().join("history/shallow").exists());
-        let has = |c: &str| Command::new("git").arg("-C").arg(work.path().join("history")).args(["cat-file", "-e", &format!("{c}^{{commit}}")]).stderr(std::process::Stdio::null()).status().unwrap().success();
-        assert!(has(&c2) && has(&c3) && !has(&c1));
-        let c = crate::newcode::parse_diff(&h.diff(&c2, &c3).unwrap());
-        assert_eq!(c["a.txt"].iter().copied().collect::<Vec<_>>(), vec![3]);
+    fn has_commit(repo: &Path, c: &str) -> bool {
+        Command::new("git").arg("-C").arg(repo).args(["cat-file", "-e", &format!("{c}^{{commit}}")])
+            .stderr(std::process::Stdio::null()).status().unwrap().success()
     }
 
     #[test]
-    fn git_history_base_outside_window_is_none() {
-        let (src, [_, _, c3]) = source_repo();
+    fn git_history_clones_shallow_and_diffs() {
+        let (src, [c0, c1, c2, c3]) = source_repo();
         let work = tempfile::tempdir().unwrap();
         let mut h = git_history(src.path(), &c3, work.path());
-        // 기준 시각 2026-01-09T12:00Z 이전 커밋(2026-01-01)은 클론 범위(-1일) 밖이다.
-        assert_eq!(h.commit_before("2026-01-09T12:00:00Z").unwrap(), None);
+        assert_eq!(h.commit_before("2026-01-10T12:00:00Z").unwrap(), Some(c2.clone()));
+        // --shallow-since=기준 시각 - 1일, 그리고 경계 커밋의 부모 한 단계(--deepen=1)까지만 받는다.
+        let repo = work.path().join("history");
+        assert!(repo.join("shallow").exists());
+        assert!(has_commit(&repo, &c1) && has_commit(&repo, &c2) && has_commit(&repo, &c3) && !has_commit(&repo, &c0));
+        let c = crate::newcode::parse_diff(&h.diff(&c2, &c3).unwrap());
+        assert_eq!(c["a.txt"].iter().copied().collect::<Vec<_>>(), vec![4]);
+    }
+
+    #[test]
+    fn git_history_base_outside_window_is_reached_by_deepening() {
+        let (src, [_, c1, _, c3]) = source_repo();
+        let work = tempfile::tempdir().unwrap();
+        let mut h = git_history(src.path(), &c3, work.path());
+        // 기준 시각 2026-01-09T12:00Z 이전 커밋(2026-01-01)은 클론 범위(-1일) 밖이지만 경계 커밋의 부모다.
+        assert_eq!(h.commit_before("2026-01-09T12:00:00Z").unwrap(), Some(c1.clone()));
+        let c = crate::newcode::parse_diff(&h.diff(&c1, &c3).unwrap());
+        assert_eq!(c["a.txt"].iter().copied().collect::<Vec<_>>(), vec![3, 4]);
+    }
+
+    #[test]
+    fn git_history_without_older_commit_is_none() {
+        let (src, [_, _, _, c3]) = source_repo();
+        let work = tempfile::tempdir().unwrap();
+        let mut h = git_history(src.path(), &c3, work.path());
+        // 모든 커밋이 기준 시각(2025-11-01) 이후다: 기준 커밋이 없다.
+        assert_eq!(h.commit_before("2025-11-01T00:00:00Z").unwrap(), None);
     }
 
     #[test]
     fn git_history_without_commits_in_window_uses_head_as_base() {
-        let (src, [_, _, c3]) = source_repo();
+        let (src, [_, _, _, c3]) = source_repo();
         let work = tempfile::tempdir().unwrap();
         let mut h = git_history(src.path(), &c3, work.path());
         // 기간(2026-01-31 이후)에 커밋이 없으면 --shallow-since 클론이 거부되어 최신 커밋만 받는다.
         assert_eq!(h.commit_before("2026-02-01T00:00:00Z").unwrap(), Some(c3.clone()));
         assert_eq!(crate::newcode::parse_diff(&h.diff(&c3, &c3).unwrap()), crate::newcode::ChangedLines::new());
+    }
+
+    #[test]
+    fn git_history_merge_in_range_uses_first_parent_base() {
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path();
+        git(p, &["init", "-qb", "main"], "2026-01-01T00:00:00Z");
+        std::fs::write(p.join("main.txt"), "1\n").unwrap();
+        git(p, &["add", "-A"], "2026-01-01T00:00:00Z");
+        git(p, &["commit", "-qm", "c1"], "2026-01-01T00:00:00Z");
+        git(p, &["checkout", "-qb", "side"], "2026-01-01T00:00:00Z");
+        std::fs::write(p.join("side.txt"), "s\n").unwrap();
+        git(p, &["add", "-A"], "2026-01-09T20:00:00Z");
+        git(p, &["commit", "-qm", "s1"], "2026-01-09T20:00:00Z");
+        git(p, &["checkout", "-q", "main"], "2026-01-08T00:00:00Z");
+        std::fs::write(p.join("main.txt"), "1\n2\n").unwrap();
+        git(p, &["add", "-A"], "2026-01-08T00:00:00Z");
+        git(p, &["commit", "-qm", "m0"], "2026-01-08T00:00:00Z");
+        let m0 = git(p, &["rev-parse", "HEAD"], "2026-01-08T00:00:00Z");
+        git(p, &["merge", "-q", "--no-ff", "-m", "merge", "side"], "2026-01-11T00:00:00Z");
+        let head = git(p, &["rev-parse", "HEAD"], "2026-01-11T00:00:00Z");
+        let work = tempfile::tempdir().unwrap();
+        let mut h = git_history(p, &head, work.path());
+        // 곁가지 커밋 s1(2026-01-09T20:00)이 더 최근이지만 기준은 첫 부모 쪽 m0이다.
+        assert_eq!(h.commit_before("2026-01-10T12:00:00Z").unwrap(), Some(m0.clone()));
+        let c = crate::newcode::parse_diff(&h.diff(&m0, &head).unwrap());
+        assert_eq!(c.keys().collect::<Vec<_>>(), vec!["side.txt"]);
     }
 
     #[test]
@@ -542,7 +647,9 @@ mod tests {
         assert!(e.contains(COMMIT), "{e}");
         let work = tempfile::tempdir().unwrap();
         let mut h = git_history(&src.path().join("nope"), COMMIT, work.path());
-        assert!(h.commit_before("2026-01-10T12:00:00Z").is_err());
+        // 기간 거부가 아닌 오류는 --depth=1로 다시 시도하지 않고 git의 오류를 그대로 알린다.
+        let e = format!("{:#}", h.commit_before("2026-01-10T12:00:00Z").unwrap_err());
+        assert!(e.contains("does not appear to be a git repository") && !e.contains("--depth=1"), "{e}");
         let mut h = git_history(src.path(), COMMIT, work.path());
         assert!(h.commit_before("not a time").is_err());
     }

@@ -104,16 +104,33 @@ fn do_fetch(a: FetchArgs) -> Result<()> {
     let catalog = load_catalog()?;
     let client = Client::new(&base, &a.config_repo, auth.clone(), qualgate::httpcfg::agent()?);
     let mut cfg = GiteaConfig::new(client, &a.config_repo, &a.git_ref);
-    let mut hist = match &a.commit {
+    // newcode.json의 head는 `git rev-parse`(소문자) 출력과 비교된다.
+    let commit = a.commit.map(|c| c.to_ascii_lowercase());
+    let mut hist = match &commit {
         Some(c) => {
-            let dir = a.history_dir.clone().unwrap_or_else(|| a.out.parent().unwrap_or(Path::new(".")).join("history"));
-            let env = qualgate::httpcfg::git_env(&auth, &base, &std::env::temp_dir())?;
-            Some(GitHistory::new(qualgate::httpcfg::clone_url(&base, &a.repo)?, a.branch.clone(), c.clone(), dir, env))
+            let dir = a.history_dir.clone().unwrap_or_else(|| match a.out.parent() {
+                Some(p) if !p.as_os_str().is_empty() => p.join("history"),
+                _ => PathBuf::from("history"),
+            });
+            // credential store 임시 파일은 이력 디렉터리의 상위(Tekton의 /work)에 둔다.
+            let setup = || -> Result<GitHistory> {
+                let work = match dir.parent() { Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(), _ => PathBuf::from(".") };
+                std::fs::create_dir_all(&work).with_context(|| format!("{} 생성 실패", work.display()))?;
+                let env = qualgate::httpcfg::git_env(&auth, &base, &work)?;
+                Ok(GitHistory::new(qualgate::httpcfg::clone_url(&base, &a.repo)?, a.branch.clone(), c.clone(), dir.clone(), env))
+            };
+            match setup() {
+                Ok(h) => Some(h),
+                Err(e) => {
+                    fetch::warn_stderr(format!("대상 저장소 이력을 받을 준비를 하지 못했습니다: {e:#}. 신규 코드는 측정하지 않습니다(scan이 git 이력으로 계산할 수 있으면 그 값을 씁니다)"));
+                    None
+                }
+            }
         }
         None => None,
     };
     let req = FetchRequest {
-        repo: a.repo, branch: a.branch, commit: a.commit, config_repo: a.config_repo, git_ref: a.git_ref,
+        repo: a.repo, branch: a.branch, commit, config_repo: a.config_repo, git_ref: a.git_ref,
         now: std::time::SystemTime::now(),
     };
     fetch::fetch(&mut cfg, hist.as_mut().map(|h| h as &mut dyn HistorySource), &req, &catalog, &a.out)?;

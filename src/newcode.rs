@@ -85,7 +85,8 @@ pub fn parse_diff(diff: &str) -> ChangedLines { parse_diff_ex(diff).0 }
 pub fn changed(src: &Path, days: u32) -> Result<Option<ChangedLines>> {
     if git(src, &["rev-parse", "--is-shallow-repository"])?.trim() == "true" { return Ok(None); }
     let before = format!("--before={days} days ago");
-    let base = git(src, &["rev-list", "-1", &before, "HEAD"])?;
+    // 병합된 곁가지 커밋이 기준으로 뽑히지 않도록 첫 부모만 따라간다.
+    let base = git(src, &["rev-list", "-1", "--first-parent", &before, "HEAD"])?;
     let base = base.trim();
     if base.is_empty() { return Ok(None); }
     let diff = git(src, &["-c", "core.quotepath=false", "diff", "-U0", "--no-color", "--no-ext-diff", "--find-renames", "--src-prefix=a/", "--dst-prefix=b/", base, "HEAD"])?;
@@ -157,6 +158,28 @@ mod tests {
         commit(d.path(), "a.txt", "1\n2\n3\n", "2099-01-01T00:00:00");
         let c = changed(d.path(), 30).unwrap().unwrap();
         assert_eq!(c["a.txt"].iter().copied().collect::<Vec<_>>(), vec![3]);
+    }
+
+    #[test]
+    fn merge_in_range_uses_first_parent_base() {
+        let d = tempfile::tempdir().unwrap();
+        let run = |args: &[&str], date: &str| {
+            let st = Command::new("git").current_dir(d.path()).args(args)
+                .env("GIT_AUTHOR_DATE", date).env("GIT_COMMITTER_DATE", date).status().unwrap();
+            assert!(st.success(), "{args:?}");
+        };
+        run(&["init", "-qb", "main"], "2000-01-01T00:00:00");
+        commit(d.path(), "main.txt", "1\n", "2000-01-01T00:00:00");
+        run(&["checkout", "-qb", "side"], "2000-01-01T00:00:00");
+        // 곁가지 커밋이 첫 부모 쪽 커밋(2010)보다 최근(2020)이다.
+        commit(d.path(), "side.txt", "s\n", "2020-01-01T00:00:00");
+        run(&["checkout", "-q", "main"], "2010-01-01T00:00:00");
+        commit(d.path(), "main.txt", "1\n2\n", "2010-01-01T00:00:00");
+        run(&["merge", "-q", "--no-ff", "-m", "merge", "side"], "2099-01-01T00:00:00");
+        // 기준은 첫 부모 쪽 2010 커밋: 병합으로 들어온 side.txt만 신규 코드다.
+        let c = changed(d.path(), 30).unwrap().unwrap();
+        assert_eq!(c.keys().collect::<Vec<_>>(), vec!["side.txt"]);
+        assert_eq!(c["side.txt"].iter().copied().collect::<Vec<_>>(), vec![1]);
     }
 
     #[test]

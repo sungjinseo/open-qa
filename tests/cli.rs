@@ -513,11 +513,12 @@ fn fetch_config_writes_config_from_gitea_and_warns_when_history_is_unavailable()
     let t = tempfile::tempdir().unwrap();
     let out = t.path().join("config");
     let token = "tok3n-not-printed";
-    let o = fetch_cmd(&url, token, &out).args(["--commit", "0123456789abcdef0123456789abcdef01234567"]).output().unwrap();
+    let o = fetch_cmd(&url, token, &out).args(["--commit", "0123456789ABCDEF0123456789abcdef01234567"]).output().unwrap();
     let (stdout, stderr) = (String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
     assert_eq!(o.status.code(), Some(0), "{stderr}");
     assert!(!stdout.contains(token) && !stderr.contains(token), "{stdout}{stderr}");
-    assert!(stderr.contains("경고"), "{stderr}");
+    // 대문자 sha도 받아 소문자로 쓴다. 클론이 실패하면 이유와 함께 경고한다.
+    assert!(stderr.contains("경고") && stderr.contains("/o/r.git") && stderr.contains("측정하지 않습니다"), "{stderr}");
     for f in ["qualgate.toml", "rulesets/std.toml", "projects/o/r.toml", "source.json"] { assert!(out.join(f).is_file(), "{f}"); }
     assert!(!out.join("newcode.json").exists());
     let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(out.join("source.json")).unwrap()).unwrap();
@@ -552,4 +553,35 @@ fn fetch_config_refuses_non_empty_out() {
     assert_eq!(o.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&o.stderr).contains("비어 있지"));
     assert!(!t.path().join("qualgate.toml").exists());
+}
+
+/// 이력 준비(credential 파일 위치 등)에 실패해도 설정은 받고 경고만 한다. credential 임시 파일은 남지 않는다.
+#[test]
+fn fetch_config_history_setup_failure_only_warns_and_cleans_credentials() {
+    let (url, _log) = fake_config_gitea(scan_fixture_files());
+    let t = tempfile::tempdir().unwrap();
+    let creds = t.path().join("creds");
+    std::fs::write(&creds, format!("{}\n", url.replacen("://", "://bot:pa55word@", 1))).unwrap();
+    let commit = ["--commit", "0123456789abcdef0123456789abcdef01234567"];
+    let basic = |out: &Path, history: &Path| {
+        let mut c = fetch_cmd(&url, "", out);
+        c.env_remove("GITEA_TOKEN").env("QUALGATE_GIT_CREDENTIALS", &creds).args(commit).arg("--history-dir").arg(history);
+        c.output().unwrap()
+    };
+    // 이력 디렉터리의 상위가 파일이라 만들 수 없다.
+    std::fs::write(t.path().join("file"), "x").unwrap();
+    let o = basic(&t.path().join("a"), &t.path().join("file/history"));
+    let e = String::from_utf8_lossy(&o.stderr);
+    assert_eq!(o.status.code(), Some(0), "{e}");
+    assert!(e.contains("이력을 받을 준비") && !e.contains("pa55word"), "{e}");
+    assert!(t.path().join("a/source.json").exists() && !t.path().join("a/newcode.json").exists());
+    // 정상 준비: credential 파일은 이력 디렉터리의 상위(work)에 만들어졌다가 종료 전에 지워진다.
+    let work = t.path().join("work");
+    let o = basic(&t.path().join("b"), &work.join("history"));
+    let e = String::from_utf8_lossy(&o.stderr);
+    assert_eq!(o.status.code(), Some(0), "{e}");
+    assert!(!e.contains("pa55word"), "{e}");
+    assert!(work.is_dir());
+    let left: Vec<_> = std::fs::read_dir(&work).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().to_string()).collect();
+    assert!(left.iter().all(|n| !n.starts_with(".qualgate-cred-")), "{left:?}");
 }
