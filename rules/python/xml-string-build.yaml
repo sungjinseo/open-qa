@@ -1,0 +1,16 @@
+rules:
+  - id: python.xml-string-build
+    languages: [python]
+    severity: INFO
+    message: "[행안부 IV-09 XML 삽입] XML을 문자열 연결·f-string으로 만들어 파싱합니다. 입력값에 태그가 들어 있으면 XML 구조가 바뀝니다. ElementTree 객체 API로 노드를 만들거나 값을 이스케이프(xml.sax.saxutils.escape)하세요."
+    pattern-either:
+      - pattern: $M.fromstring(f"...")
+      - pattern: $M.fromstring("..." + $X)
+      - pattern: $M.fromstring("..." % $X)
+      - pattern: $M.parseString(f"...")
+    metadata:
+      qualgate_id: python.xml-string-build
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: IV-09
+      cwe: "CWE-91"

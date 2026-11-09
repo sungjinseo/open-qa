@@ -1,0 +1,17 @@
+rules:
+  - id: go.slice-assign-field
+    languages: [go]
+    severity: INFO
+    message: "[행안부 EN-04 Private 배열에 Public 데이터 할당] 공개 메서드가 인자로 받은 슬라이스를 구조체 필드에 그대로 대입합니다. 호출자가 보관한 참조로 내부 데이터를 몰래 바꿀 수 있습니다. 복사본을 저장하세요."
+    pattern: |
+      func ($R *$T) $M($P []$E) {
+          ...
+          $R.$F = $P
+          ...
+      }
+    metadata:
+      qualgate_id: go.slice-assign-field
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: EN-04
+      cwe: "CWE-496"

@@ -2,10 +2,11 @@ rules:
   - id: go.tls-skip-verify
     languages: [go]
     severity: ERROR
-    message: "InsecureSkipVerify를 켜면 TLS 인증서 검증이 꺼져 중간자 공격에 노출됩니다. 검증을 유지하고 필요하면 RootCAs를 지정하세요."
-    pattern: |
-      tls.Config{..., InsecureSkipVerify: true, ...}
+    message: "[행안부 SF-11 부적절한 인증서 유효성 검증] InsecureSkipVerify: true로 TLS 인증서 검증을 껐습니다. 중간자 공격으로 통신 내용이 노출·변조됩니다. 검증을 켜고 사설 CA라면 RootCAs에 추가하세요."
+    pattern: 'tls.Config{..., InsecureSkipVerify: true, ...}'
     metadata:
       qualgate_id: go.tls-skip-verify
-      qualgate_severity: critical
+      qualgate_severity: high
       qualgate_category: security
+      qualgate_mois: SF-11
+      cwe: "CWE-295"

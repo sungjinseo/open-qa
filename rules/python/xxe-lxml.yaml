@@ -1,0 +1,15 @@
+rules:
+  - id: python.xxe-lxml
+    languages: [python]
+    severity: ERROR
+    message: "[행안부 IV-08 부적절한 XML 외부개체 참조] XML 파서에서 외부 엔티티 해석을 켰습니다. XML 안에서 서버 파일을 읽거나 내부망으로 요청을 보낼 수 있습니다. resolve_entities=False, no_network=True로 설정하거나 defusedxml을 쓰세요."
+    pattern-either:
+      - pattern: $M.XMLParser(..., resolve_entities=True, ...)
+      - pattern: $P.setFeature(xml.sax.handler.feature_external_ges, True)
+      - pattern: $P.setFeature(feature_external_ges, True)
+    metadata:
+      qualgate_id: python.xxe-lxml
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-08
+      cwe: "CWE-611"

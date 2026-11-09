@@ -2,10 +2,13 @@ rules:
   - id: python.weak-hash-sha1
     languages: [python]
     severity: WARNING
-    message: "SHA-1은 충돌 공격이 실증되어 보안 용도로 부적합합니다. hashlib.sha256 이상을 사용하세요."
-    pattern: |
-      hashlib.sha1(...)
+    message: "[행안부 SF-04 취약한 암호화 알고리즘 사용] SHA-1은 충돌 공격이 실증된 해시입니다. SHA-256 이상을 쓰고 비밀번호는 bcrypt·argon2로 저장하세요."
+    pattern-either:
+      - pattern: hashlib.sha1(...)
+      - pattern: hashlib.new("sha1", ...)
     metadata:
       qualgate_id: python.weak-hash-sha1
       qualgate_severity: medium
       qualgate_category: security
+      qualgate_mois: SF-04
+      cwe: "CWE-328"

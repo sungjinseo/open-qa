@@ -1,0 +1,18 @@
+rules:
+  - id: vue.data-shared-object
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "[행안부 EN-01 잘못된 세션에 의한 데이터 정보노출] 컴포넌트의 data를 객체로 직접 지정했습니다. 같은 컴포넌트의 모든 인스턴스가 상태를 공유해 한 사용자·화면의 입력값이 다른 곳에 보입니다. data()는 함수로 만들어 인스턴스마다 새 객체를 반환하세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    patterns:
+      - pattern-either:
+          - pattern: export default {...}
+          - pattern: defineComponent({...})
+      - pattern-regex: (?m)^( {2}|\x09)data:\s*\{
+    metadata:
+      qualgate_id: vue.data-shared-object
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: EN-01
+      cwe: "CWE-488"

@@ -57,7 +57,7 @@ labels = []
 
 설정 파일에 알 수 없는 키가 있거나 형식이 틀리면 스캔 전에 종료 코드 2로 끝납니다. 오류 메시지에는 줄과 열만 나오고 설정 내용은 나오지 않습니다. 다음 값도 종료 코드 2입니다: `.qualgate.toml`이 심볼릭 링크, `blocking_severities`에 `info`·`low`·`medium`·`high`·`critical` 외의 값, `block_lines`나 `min_tokens`가 0, `labels`에 `qualgate:ignored`, `rules.extra_paths`가 저장소 밖(심볼릭 링크 포함)을 가리킴. `max_new_issues`는 1~100으로 조정하고 경고합니다.
 
-`exclude`가 분석 대상을 정하는 유일한 필터입니다. `.gitignore`, `.semgrepignore`, Opengrep의 파일 크기 제한과 기본 제외 폴더(`tests/` 등)는 적용하지 않습니다. 대상 파일 중 Opengrep이 스캔하지 않은 파일은 분석 실패로 기록하고 그 파일의 이슈는 닫지 않습니다. 단, 기본 규칙이 대상으로 하지 않는 `.js`, `.ts`, `.mjs`, `.cjs`, `.mts`, `.cts`(React 규칙은 `.jsx`, `.tsx`만 검사)는 스캔되지 않아도 분석 실패로 보지 않으며, 중복도와 커버리지만 측정합니다. Opengrep 1.33.1은 `.mts`, `.cts`를 아예 스캔하지 않습니다. 이 예외는 확장자 단위입니다. Opengrep이 그 확장자의 파일을 하나라도 스캔했다면(예: 외부 규칙이 `.js`를 대상으로 하는 경우) 같은 확장자의 스캔되지 않은 파일은 분석 실패입니다. 따라서 외부 규칙을 `paths.include`로 일부 `.js` 파일에만 한정하면 나머지 `.js` 파일은 분석 실패로 기록됩니다.
+`exclude`가 분석 대상을 정하는 유일한 필터입니다. `.gitignore`, `.semgrepignore`, Opengrep의 파일 크기 제한과 기본 제외 폴더(`tests/` 등)는 적용하지 않습니다. 대상 파일 중 Opengrep이 스캔하지 않은 파일은 분석 실패로 기록하고 그 파일의 이슈는 닫지 않습니다. `.js`, `.ts`, `.mjs`, `.cjs`, `.mts`, `.cts`는 확장자 단위로 판정합니다. Opengrep이 그 확장자의 파일을 하나라도 스캔했다면(기본 `ts` 규칙이 있으므로 보통 `.js`, `.ts`, `.mjs`, `.cjs`가 해당) 같은 확장자의 스캔되지 않은 파일은 분석 실패입니다. Opengrep 1.33.1은 `.mts`, `.cts`를 아예 스캔하지 않으므로 이 두 확장자는 분석 실패로 보지 않고 중복도와 커버리지만 측정합니다. 외부 규칙을 `paths.include`로 일부 파일에만 한정하면 나머지 같은 확장자 파일은 분석 실패로 기록됩니다.
 
 ## 지원 언어와 커버리지 형식
 
@@ -134,7 +134,7 @@ USER qualgate
 - 품질 게이트는 보안 경계가 아닙니다. 저장소가 자기 `.qualgate.toml`로 기준값을 바꿀 수 있습니다. 기준을 강제하려면 설정 변경을 코드 리뷰로 막으세요.
 - 테스트 파일도 규칙 검사 대상이며 이슈로 등록되고 `new_blocking`에 포함됩니다 (사용자 결정 사항). 중복도와 커버리지 지표에서만 `test_paths`를 제외합니다. 테스트 코드를 검사하지 않으려면 `exclude`에 넣으세요.
 - 측정할 수 있는 게이트 조건이 하나도 없으면 게이트는 통과로 끝나지만 경고를 출력합니다.
-- 기본 규칙은 언어별 20개씩입니다. 오탐률은 아직 측정하지 않았습니다 (사내 저장소 검증 대기 중, `docs/verification.md` 참고). `rules.extra_paths`로 직접 쓴 Opengrep 규칙 폴더를 추가할 수 있습니다.
+- 기본 규칙은 행정안전부 「소프트웨어 보안약점 진단가이드」 49개 항목을 기준으로 java, python, go, ts(JS/TS), react, vue별로 작성했고 항목별 대응 범위는 [docs/mois49.md](docs/mois49.md)에 있습니다. 코드만으로 판단할 수 없는 항목은 수동 확인으로 표시했습니다. kotlin은 기존 20개 규칙을 유지합니다. 오탐률은 아직 측정하지 않았습니다 (사내 저장소 검증 대기 중, `docs/verification.md` 참고). `rules.extra_paths`로 직접 쓴 Opengrep 규칙 폴더를 추가할 수 있습니다.
 - 여섯 언어(Java, Kotlin, Python, JS/TS, Vue, Go) 밖의 파일(예: 외부 규칙이 대상으로 하는 YAML)은 "실제로 스캔했는가" 검사를 하지 않으므로, 스캔되지 않아도 분석 실패로 기록되지 않습니다. UTF-8이 아닌 파일 이름은 분석하지 못한 채로 남습니다.
 - Vue는 `<script>`와 `<script setup>`만 분석하며 `<template>`은 분석하지 않습니다.
 - 파일 간 데이터 흐름 분석이 없습니다. 파일 하나 안에서 보이는 패턴만 찾습니다.
@@ -149,4 +149,4 @@ USER qualgate
 - `SonarSource/sonarqube` 공개 소스(LGPL-3.0): 이슈 추적(`Tracker`)과 중복 블록 알고리즘(`PmdBlockChunker` 등)을 Rust로 포팅했습니다. 포팅한 파일에는 원본 저작권 고지를 유지했습니다.
 - Opengrep(LGPL-2.1): 수정 없이 릴리스 바이너리를 외부 프로세스로 실행합니다. 이미지를 만들 때 릴리스 서명을 검증합니다.
 - tree-sitter와 언어 문법 크레이트(MIT): 의존성으로 사용합니다.
-- `semgrep-rules`, `opengrep-rules`는 저장소에 포함하지 않았습니다. 기본 규칙은 이 프로젝트에서 직접 작성했습니다.
+- `semgrep-rules`, `opengrep-rules`는 저장소에 포함하지 않았습니다. 기본 규칙은 이 프로젝트에서 직접 작성했습니다. 다만 `rules/ts`와 `rules/react/dangerous-html.yaml`의 일부 규칙은 [kr-secure-coding](https://github.com/ace30126/kr-secure-coding)(MIT, (c) 2026 ace30126)에서 옮겨 고친 것이며 `THIRD_PARTY_NOTICES.md`에 라이선스와 파일 목록이 있습니다.

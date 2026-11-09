@@ -1,10 +1,9 @@
-class E {
-    int f() {
+class Loader {
+    void load() {
         try {
-            return Integer.parseInt("x");
-        } catch (NumberFormatException e) {
-            System.err.println("invalid number: " + e.getMessage());
-            return 0;
+            Class.forName("x.Y");
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException("missing plugin", e);
         }
     }
 }

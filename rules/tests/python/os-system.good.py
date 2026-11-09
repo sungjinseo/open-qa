@@ -1,4 +1,4 @@
-import shutil
+import subprocess
 
-def clean(path):
-    shutil.rmtree(path)
+def ping(host):
+    subprocess.run(["ping", "-c", "1", host], check=True)

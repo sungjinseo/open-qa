@@ -1,6 +1,8 @@
-import java.io.*;
-class D {
-    String read(InputStream in) throws Exception {
-        return new BufferedReader(new InputStreamReader(in)).readLine();
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.InputStream;
+
+class Loader {
+    Object load(InputStream in) throws Exception {
+        return new ObjectMapper().readValue(in, java.util.Map.class);
     }
 }

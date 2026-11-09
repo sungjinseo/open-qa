@@ -2,10 +2,14 @@ rules:
   - id: java.trust-all-hostnames
     languages: [java]
     severity: ERROR
-    message: "호스트 이름 검증기를 교체하면 TLS 호스트 검증이 무력화되어 중간자 공격에 노출됩니다. 기본 검증기를 유지하세요."
-    pattern: |
-      HttpsURLConnection.setDefaultHostnameVerifier(...)
+    message: "[행안부 SF-11 부적절한 인증서 유효성 검증] 호스트 이름 검증을 사용자 정의 로직이나 무조건 통과로 바꿨습니다. 중간자 공격자의 인증서를 신뢰하게 됩니다. 기본 HostnameVerifier를 쓰고 NoopHostnameVerifier는 쓰지 마세요."
+    pattern-either:
+      - pattern: HttpsURLConnection.setDefaultHostnameVerifier(...)
+      - pattern: $C.setHostnameVerifier(...)
+      - pattern: NoopHostnameVerifier.INSTANCE
     metadata:
       qualgate_id: java.trust-all-hostnames
-      qualgate_severity: critical
+      qualgate_severity: high
       qualgate_category: security
+      qualgate_mois: SF-11
+      cwe: "CWE-295"

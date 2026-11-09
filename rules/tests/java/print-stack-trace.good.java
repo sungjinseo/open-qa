@@ -1,10 +1,11 @@
 import java.util.logging.*;
-class L {
-    private static final Logger LOG = Logger.getLogger("L");
-    void f() {
+
+class Job {
+    private static final Logger LOG = Logger.getLogger(Job.class.getName());
+    void run() {
         try {
             Integer.parseInt("x");
-        } catch (Exception e) {
+        } catch (NumberFormatException e) {
             LOG.log(Level.WARNING, "parse failed", e);
         }
     }

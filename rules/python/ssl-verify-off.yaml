@@ -1,0 +1,16 @@
+rules:
+  - id: python.ssl-verify-off
+    languages: [python]
+    severity: ERROR
+    message: "[행안부 SF-11 부적절한 인증서 유효성 검증] ssl 모듈에서 인증서·호스트 이름 검증을 껐습니다. 중간자 공격에 그대로 노출됩니다. ssl.create_default_context()의 기본 검증을 유지하세요."
+    pattern-either:
+      - pattern: ssl._create_unverified_context(...)
+      - pattern: ssl._create_default_https_context = ssl._create_unverified_context
+      - pattern: $C.check_hostname = False
+      - pattern: $C.verify_mode = ssl.CERT_NONE
+    metadata:
+      qualgate_id: python.ssl-verify-off
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: SF-11
+      cwe: "CWE-295"

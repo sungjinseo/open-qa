@@ -1,0 +1,39 @@
+rules:
+  - id: python.xss-unescaped-output
+    languages: [python]
+    severity: ERROR
+    message: "[행안부 IV-04 크로스사이트 스크립트] 요청 값을 이스케이프 없이 HTML 응답으로 내보냅니다(Markup·mark_safe·HttpResponse). 다른 사용자의 브라우저에서 스크립트가 실행됩니다. 템플릿 자동 이스케이프를 쓰거나 markupsafe.escape()·django.utils.html.escape()로 인코딩하세요."
+    mode: taint
+    pattern-sources:
+      - pattern: request.args
+      - pattern: request.form
+      - pattern: request.values
+      - pattern: request.json
+      - pattern: request.get_json(...)
+      - pattern: request.cookies
+      - pattern: request.headers
+      - pattern: request.GET
+      - pattern: request.POST
+      - pattern: request.data
+      - pattern: request.body
+
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: Markup($V)
+              - pattern: mark_safe($V)
+              - pattern: HttpResponse($V, ...)
+              - pattern: make_response($V, ...)
+          - focus-metavariable: $V
+    pattern-sanitizers:
+      - pattern: escape(...)
+      - pattern: html.escape(...)
+      - pattern: bleach.clean(...)
+      - pattern: jsonify(...)
+      - pattern: json.dumps(...)
+    metadata:
+      qualgate_id: python.xss-unescaped-output
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-04
+      cwe: "CWE-79"

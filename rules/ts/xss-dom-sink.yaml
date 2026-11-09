@@ -1,0 +1,29 @@
+# Adapted from kr-secure-coding (MIT, (c) 2026 ace30126)
+rules:
+  - id: ts.xss-dom-sink
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "[행안부 IV-04 크로스사이트 스크립트] innerHTML·outerHTML·insertAdjacentHTML·document.write에 변수를 넣습니다. 사용자 입력이 섞이면 다른 사용자의 브라우저에서 스크립트가 실행됩니다. textContent를 쓰거나 DOMPurify.sanitize()를 거친 값만 넣으세요."
+    pattern-either:
+      - patterns:
+          - pattern: $E.innerHTML = $X
+          - pattern-not: $E.innerHTML = "..."
+          - pattern-not: $E.innerHTML = DOMPurify.sanitize(...)
+      - patterns:
+          - pattern: $E.outerHTML = $X
+          - pattern-not: $E.outerHTML = "..."
+          - pattern-not: $E.outerHTML = DOMPurify.sanitize(...)
+      - patterns:
+          - pattern: $E.insertAdjacentHTML($P, $X)
+          - pattern-not: $E.insertAdjacentHTML($P, "...")
+          - pattern-not: $E.insertAdjacentHTML($P, DOMPurify.sanitize(...))
+      - patterns:
+          - pattern: document.write($X)
+          - pattern-not: document.write("...")
+          - pattern-not: document.write(DOMPurify.sanitize(...))
+    metadata:
+      qualgate_id: ts.xss-dom-sink
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-04
+      cwe: "CWE-79"

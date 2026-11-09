@@ -1,3 +1,1 @@
-export function Ext() {
-  return <a href="https://example.com" target="_blank">외부</a>;
-}
+export const Link = ({ url }: { url: string }) => <a href={url} target="_blank">open</a>;

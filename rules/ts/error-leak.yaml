@@ -1,0 +1,17 @@
+# Adapted from kr-secure-coding (MIT, (c) 2026 ace30126)
+rules:
+  - id: ts.error-leak
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "[행안부 EH-01 오류 메시지 정보노출] 예외의 stack을 응답으로 돌려줍니다. 파일 경로·라이브러리 버전 같은 내부 정보가 공격자에게 노출됩니다. 상세 오류는 서버 로그에만 남기고 클라이언트에는 일반 메시지를 보내세요."
+    pattern-either:
+      - pattern: '$RES.json({..., $K: $E.stack, ...})'
+      - pattern: $RES.send($E.stack)
+      - pattern: 'NextResponse.json({..., $K: $E.stack, ...}, ...)'
+      - pattern: 'Response.json({..., $K: $E.stack, ...}, ...)'
+    metadata:
+      qualgate_id: ts.error-leak
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: EH-01
+      cwe: "CWE-209"

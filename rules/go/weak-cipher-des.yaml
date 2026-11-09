@@ -2,10 +2,14 @@ rules:
   - id: go.weak-cipher-des
     languages: [go]
     severity: ERROR
-    message: "DES는 키 길이가 짧아 쉽게 해독됩니다. AES-GCM 같은 현대적 알고리즘을 사용하세요."
-    pattern: |
-      des.NewCipher(...)
+    message: "[행안부 SF-04 취약한 암호화 알고리즘 사용] DES·3DES·RC4는 키가 짧거나 알려진 공격이 있는 암호입니다. 해독되거나 평문 일부가 드러납니다. AES-GCM(cipher.NewGCM)을 쓰세요."
+    pattern-either:
+      - pattern: des.NewCipher(...)
+      - pattern: des.NewTripleDESCipher(...)
+      - pattern: rc4.NewCipher(...)
     metadata:
       qualgate_id: go.weak-cipher-des
       qualgate_severity: high
       qualgate_category: security
+      qualgate_mois: SF-04
+      cwe: "CWE-327"

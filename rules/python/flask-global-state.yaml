@@ -1,0 +1,17 @@
+rules:
+  - id: python.flask-global-state
+    languages: [python]
+    severity: INFO
+    message: "[행안부 EN-01 잘못된 세션에 의한 데이터 정보노출] 요청 처리 함수에서 global 변수를 바꿉니다. 서버는 여러 요청을 동시에 처리하므로 다른 사용자의 데이터가 섞여 노출될 수 있습니다. 요청별 값은 지역 변수나 g·session 객체에 두세요."
+    pattern: |
+      @$APP.route(...)
+      def $F(...):
+          ...
+          global $V
+          ...
+    metadata:
+      qualgate_id: python.flask-global-state
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: EN-01
+      cwe: "CWE-488"

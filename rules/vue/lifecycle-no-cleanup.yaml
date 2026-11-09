@@ -1,0 +1,26 @@
+rules:
+  - id: vue.lifecycle-no-cleanup
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "[행안부 CE-02 부적절한 자원 해제] onMounted/mounted에서 setInterval·addEventListener를 등록하고 해제하지 않습니다. 컴포넌트가 사라져도 타이머와 리스너가 남아 메모리와 자원이 누수됩니다. onUnmounted/beforeUnmount에서 clearInterval·removeEventListener로 정리하세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: onMounted(() => {... setInterval(...); ...})
+              - pattern: onMounted(() => {... $W.addEventListener(...); ...})
+          - pattern-not-inside: |
+              onMounted(...);
+              ...
+              onUnmounted(...);
+          - pattern-not-inside: |
+              onMounted(...);
+              ...
+              onBeforeUnmount(...);
+    metadata:
+      qualgate_id: vue.lifecycle-no-cleanup
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: CE-02
+      cwe: "CWE-404"

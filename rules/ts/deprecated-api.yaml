@@ -1,0 +1,15 @@
+rules:
+  - id: ts.deprecated-api
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "[행안부 AM-02 취약한 API 사용] 폐기됐거나 안전하지 않은 Node.js API를 씁니다(new Buffer, fs.exists, process.binding). 초기화되지 않은 메모리 노출 등 알려진 문제가 있습니다. Buffer.from/alloc, fs.access 등 대체 API를 쓰세요."
+    pattern-either:
+      - pattern: new Buffer(...)
+      - pattern: $FS.exists($P, ...)
+      - pattern: process.binding(...)
+    metadata:
+      qualgate_id: ts.deprecated-api
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: AM-02
+      cwe: "CWE-477"

@@ -1,0 +1,25 @@
+rules:
+  - id: java.private-array-return
+    languages: [java]
+    severity: INFO
+    message: "[행안부 EN-03 Public 메소드로부터 반환된 Private 배열] public 메서드가 private 배열 필드를 그대로 반환합니다. 호출자가 배열 내용을 바꿔 객체 내부 상태가 깨집니다. clone()이나 Arrays.copyOf로 복사본을 반환하세요."
+    patterns:
+      - pattern-inside: |
+          class $C {
+            ...
+            private $T[] $F = ...;
+            ...
+          }
+      - pattern-inside: |
+          public $T[] $M() {
+            ...
+          }
+      - pattern-either:
+          - pattern: return $F;
+          - pattern: return this.$F;
+    metadata:
+      qualgate_id: java.private-array-return
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: EN-03
+      cwe: "CWE-495"

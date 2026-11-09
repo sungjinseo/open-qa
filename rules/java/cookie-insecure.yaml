@@ -1,0 +1,14 @@
+rules:
+  - id: java.cookie-insecure
+    languages: [java]
+    severity: WARNING
+    message: "[행안부 SF-12 쿠키를 통한 정보노출] 쿠키의 Secure 또는 HttpOnly 속성을 명시적으로 껐습니다. 세션 쿠키가 평문으로 전송되거나 스크립트로 탈취됩니다. setSecure(true)와 setHttpOnly(true)를 설정하세요."
+    pattern-either:
+      - pattern: $C.setHttpOnly(false)
+      - pattern: $C.setSecure(false)
+    metadata:
+      qualgate_id: java.cookie-insecure
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: SF-12
+      cwe: "CWE-614"

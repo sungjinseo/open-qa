@@ -1,0 +1,52 @@
+# Adapted from kr-secure-coding (MIT, (c) 2026 ace30126)
+rules:
+  - id: ts.open-redirect
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "[행안부 IV-07 신뢰되지 않은 URL주소로 자동접속 연결] 요청 값을 그대로 리다이렉트 주소로 씁니다. 정상 사이트 링크를 통해 사용자를 피싱 사이트로 보낼 수 있습니다. 허용 경로 목록과 비교하거나 / 로 시작하는 내부 경로만 허용하세요."
+    mode: taint
+
+    pattern-sources:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
+      - pattern: $REQ.headers
+      - pattern: searchParams.get(...)
+      - pattern: $U.searchParams.get(...)
+      - pattern: $R.nextUrl.searchParams.get(...)
+      - pattern: new URLSearchParams(...).get(...)
+      - patterns:
+          - pattern: $SP.get(...)
+          - pattern-either:
+              - pattern-inside: |
+                  const [$SP] = useSearchParams();
+                  ...
+              - pattern-inside: |
+                  const [$SP, $SET] = useSearchParams();
+                  ...
+              - pattern-inside: |
+                  const $SP = useSearchParams();
+                  ...
+              - pattern-inside: |
+                  const $SP = new URLSearchParams(...);
+                  ...
+      - pattern: await $REQ.json()
+      - pattern: await $REQ.formData()
+
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.redirect($URL, ...)
+              - pattern: NextResponse.redirect($URL, ...)
+              - pattern: redirect($URL)
+              - pattern: window.location.href = $URL
+              - pattern: window.location.assign($URL)
+          - focus-metavariable: $URL
+    pattern-sanitizers:
+      - pattern: safeRedirectTarget(...)
+    metadata:
+      qualgate_id: ts.open-redirect
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: IV-07
+      cwe: "CWE-601"

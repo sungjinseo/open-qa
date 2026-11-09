@@ -1,0 +1,14 @@
+rules:
+  - id: vue.store-state-mutation
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "Vuex store의 state를 mutation 밖에서 직접 바꿉니다. 변경 추적이 깨지고 devtools·플러그인이 상태 변화를 알지 못합니다. commit()으로 mutation을 호출하세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    pattern-either:
+      - pattern: this.$store.state.$K = $V
+      - pattern: $S.state.$K = $V
+    metadata:
+      qualgate_id: vue.store-state-mutation
+      qualgate_severity: medium
+      qualgate_category: bug

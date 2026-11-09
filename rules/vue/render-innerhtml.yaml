@@ -1,0 +1,19 @@
+rules:
+  - id: vue.render-innerhtml
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "[행안부 IV-04 크로스사이트 스크립트] 렌더 함수에서 innerHTML·domProps.innerHTML에 값을 넣습니다(v-html과 같은 효과). 사용자 입력이 섞이면 스크립트가 실행됩니다. 텍스트 자식으로 렌더링하거나 DOMPurify로 정화하세요. (템플릿의 v-html은 이 도구가 볼 수 없어 점검 범위 밖입니다.)"
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    patterns:
+      - pattern-either:
+          - pattern: 'h($T, {..., innerHTML: $X, ...}, ...)'
+          - pattern: '{..., domProps: {..., innerHTML: $X, ...}, ...}'
+      - pattern-not: 'h($T, {..., innerHTML: "...", ...}, ...)'
+      - pattern-not: 'h($T, {..., innerHTML: DOMPurify.sanitize(...), ...}, ...)'
+    metadata:
+      qualgate_id: vue.render-innerhtml
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-04
+      cwe: "CWE-79"

@@ -1,4 +1,4 @@
 import subprocess
 
-def ping(host):
-    subprocess.run("ping -c 1 " + host, shell=True)
+def archive(name):
+    subprocess.run("tar czf out.tgz " + name, shell=True)

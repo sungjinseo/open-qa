@@ -1,0 +1,19 @@
+rules:
+  - id: java.null-deref-request-param
+    languages: [java]
+    severity: INFO
+    message: "[행안부 CE-01 Null Pointer 역참조] getParameter·getHeader는 값이 없으면 null을 돌려주는데 바로 메서드를 호출합니다. 파라미터를 생략하면 NullPointerException이 나서 오류 화면이나 서비스 장애로 이어집니다. null 검사를 하거나 상수.equals(값) 형태로 비교하세요."
+    patterns:
+      - pattern: $R.$G($N).$M(...)
+      - metavariable-regex:
+          metavariable: $G
+          regex: ^(getParameter|getHeader|getAttribute)$
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(?!equals$|equalsIgnoreCase$).*$
+    metadata:
+      qualgate_id: java.null-deref-request-param
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: CE-01
+      cwe: "CWE-476"

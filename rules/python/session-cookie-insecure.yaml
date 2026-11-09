@@ -1,0 +1,17 @@
+rules:
+  - id: python.session-cookie-insecure
+    languages: [python]
+    severity: WARNING
+    message: "[행안부 SF-12 쿠키를 통한 정보노출] 세션·CSRF 쿠키의 Secure 또는 HttpOnly 설정을 껐습니다. 세션이 평문으로 전송되거나 스크립트로 탈취됩니다. 해당 설정을 True로 두세요."
+    pattern-either:
+      - pattern: SESSION_COOKIE_SECURE = False
+      - pattern: SESSION_COOKIE_HTTPONLY = False
+      - pattern: CSRF_COOKIE_SECURE = False
+      - pattern: $A.config["SESSION_COOKIE_SECURE"] = False
+      - pattern: $A.config["SESSION_COOKIE_HTTPONLY"] = False
+    metadata:
+      qualgate_id: python.session-cookie-insecure
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: SF-12
+      cwe: "CWE-1004"

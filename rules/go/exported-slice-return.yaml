@@ -1,0 +1,15 @@
+rules:
+  - id: go.exported-slice-return
+    languages: [go]
+    severity: INFO
+    message: "[행안부 EN-03 Public 메소드로부터 반환된 Private 배열] 공개 메서드가 구조체 내부 슬라이스를 그대로 반환합니다. 호출자가 내용을 바꿔 객체 내부 상태가 깨집니다. append([]T(nil), s...)나 slices.Clone으로 복사본을 반환하세요."
+    pattern: |
+      func ($R *$T) $M() []$E {
+          return $R.$F
+      }
+    metadata:
+      qualgate_id: go.exported-slice-return
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: EN-03
+      cwe: "CWE-495"

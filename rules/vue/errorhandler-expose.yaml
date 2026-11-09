@@ -1,0 +1,15 @@
+rules:
+  - id: vue.errorhandler-expose
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "[행안부 EH-01 오류 메시지 정보노출] 전역 errorHandler가 오류 내용을 화면(alert)에 그대로 보여줍니다. 스택 트레이스와 내부 경로가 사용자에게 노출됩니다. 서버나 로그 수집기로 보내고 사용자에게는 일반 메시지만 보여주세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    patterns:
+      - pattern: $A.config.errorHandler = ($E, ...) => {... alert(<... $E ...>); ...}
+    metadata:
+      qualgate_id: vue.errorhandler-expose
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: EH-01
+      cwe: "CWE-209"

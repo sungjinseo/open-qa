@@ -1,0 +1,18 @@
+rules:
+  - id: react.insecure-resource-url
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "[행안부 SF-05 암호화되지 않은 중요정보] JSX에서 http:// 주소의 리소스(이미지·스크립트·프레임)를 불러옵니다. 평문 전송이라 변조되거나 혼합 콘텐츠로 차단됩니다. https:// 를 사용하세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    patterns:
+      - pattern: <$T src=$S />
+      - metavariable-regex:
+          metavariable: $S
+          regex: ^["']http://(?!localhost|127\.0\.0\.1)
+    metadata:
+      qualgate_id: react.insecure-resource-url
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: SF-05
+      cwe: "CWE-319"

@@ -1,0 +1,18 @@
+rules:
+  - id: java.int-overflow-array-size
+    languages: [java]
+    severity: INFO
+    message: "[행안부 IV-14 정수형 오버플로우] int 곱셈 결과를 배열 크기로 씁니다. 값이 클 때 오버플로우로 음수나 작은 값이 되어 버퍼가 잘못 할당됩니다. Math.multiplyExact를 쓰거나 입력 범위를 먼저 검증하세요."
+    patterns:
+      - pattern-either:
+          - pattern: new $T[$A * $B]
+          - pattern: ByteBuffer.allocate($A * $B)
+      - metavariable-regex:
+          metavariable: $A
+          regex: ^[A-Za-z_]\w*$
+    metadata:
+      qualgate_id: java.int-overflow-array-size
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: IV-14
+      cwe: "CWE-190"

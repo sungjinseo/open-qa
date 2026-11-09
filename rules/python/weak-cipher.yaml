@@ -1,0 +1,18 @@
+rules:
+  - id: python.weak-cipher
+    languages: [python]
+    severity: ERROR
+    message: "[행안부 SF-04 취약한 암호화 알고리즘 사용] DES·RC4·Blowfish 같은 취약한 암호나 ECB 모드를 씁니다. 키가 짧거나 평문 패턴이 그대로 드러납니다. AES-GCM(cryptography의 AESGCM)을 쓰세요."
+    pattern-either:
+      - pattern: DES.new(...)
+      - pattern: DES3.new(...)
+      - pattern: ARC4.new(...)
+      - pattern: Blowfish.new(...)
+      - pattern: AES.new($K, AES.MODE_ECB, ...)
+      - pattern: modes.ECB()
+    metadata:
+      qualgate_id: python.weak-cipher
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: SF-04
+      cwe: "CWE-327"

@@ -1,0 +1,21 @@
+rules:
+  - id: go.format-string
+    languages: [go]
+    severity: WARNING
+    message: "[행안부 IV-17 포맷 스트링 삽입] 변수를 그대로 서식 문자열 자리에 넘깁니다. 값에 %가 들어 있으면 서식이 해석되어 출력이 깨지거나 정보가 노출됩니다. fmt.Printf(\"%s\", v)처럼 서식은 고정 리터럴로 두세요."
+    patterns:
+      - pattern-either:
+          - pattern: fmt.Printf($F)
+          - pattern: fmt.Sprintf($F)
+          - pattern: fmt.Fprintf($W, $F)
+          - pattern: log.Printf($F)
+      - pattern-not: fmt.Printf("...")
+      - pattern-not: fmt.Sprintf("...")
+      - pattern-not: fmt.Fprintf($W, "...")
+      - pattern-not: log.Printf("...")
+    metadata:
+      qualgate_id: go.format-string
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: IV-17
+      cwe: "CWE-134"

@@ -1,0 +1,15 @@
+rules:
+  - id: java.hardcoded-crypto-key
+    languages: [java]
+    severity: ERROR
+    message: "[행안부 SF-06 하드코드된 중요정보] 암호화 키나 DB 접속 비밀번호를 코드의 문자열 상수로 만듭니다. 소스가 노출되면 암호문이 모두 복호화됩니다. 키는 키 관리 시스템이나 환경변수에서 읽고 주기적으로 교체하세요."
+    pattern-either:
+      - pattern: new SecretKeySpec("...".getBytes(...), ...)
+      - pattern: new IvParameterSpec("...".getBytes(...))
+      - pattern: DriverManager.getConnection($U, $USER, "...")
+    metadata:
+      qualgate_id: java.hardcoded-crypto-key
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: SF-06
+      cwe: "CWE-321"

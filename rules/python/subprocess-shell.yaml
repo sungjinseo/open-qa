@@ -2,10 +2,11 @@ rules:
   - id: python.subprocess-shell
     languages: [python]
     severity: ERROR
-    message: "shell=True는 입력이 셸에서 해석되어 명령 인젝션 위험이 있습니다. 인자 리스트를 전달하고 shell을 끄세요."
-    pattern: |
-      subprocess.$F(..., shell=True, ...)
+    message: "[행안부 IV-05 운영체제 명령어 삽입] shell=True로 명령을 실행합니다. 외부 값이 섞이면 임의 명령이 실행됩니다. 인자를 리스트로 넘기고 shell=True를 제거하세요."
+    pattern: subprocess.$F(..., shell=True, ...)
     metadata:
       qualgate_id: python.subprocess-shell
-      qualgate_severity: high
+      qualgate_severity: critical
       qualgate_category: security
+      qualgate_mois: IV-05
+      cwe: "CWE-78"

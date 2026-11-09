@@ -1,0 +1,18 @@
+rules:
+  - id: ts.client-controlled-role
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "[행안부 IV-15 보안기능 결정에 사용되는 부적절한 입력값] 쿠키·헤더·본문처럼 클라이언트가 바꿀 수 있는 값으로 권한을 판단합니다. 값을 조작해 관리자 기능을 쓸 수 있습니다. 서버 세션이나 서명 검증된 토큰의 값으로 판단하세요."
+    patterns:
+      - pattern-either:
+          - pattern: if (<... $REQ.cookies.$F ...>) {...}
+          - pattern: if (<... $REQ.body.$F ...>) {...}
+      - metavariable-regex:
+          metavariable: $F
+          regex: (?i).*(admin|role|isauth|authenticated|privilege).*
+    metadata:
+      qualgate_id: ts.client-controlled-role
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: IV-15
+      cwe: "CWE-807"

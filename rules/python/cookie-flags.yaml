@@ -1,0 +1,15 @@
+rules:
+  - id: python.cookie-flags
+    languages: [python]
+    severity: WARNING
+    message: "[행안부 SF-12 쿠키를 통한 정보노출] set_cookie에 secure·httponly 옵션이 모두 지정되지 않았습니다. 쿠키가 평문으로 전송되거나 스크립트로 탈취됩니다. secure=True, httponly=True, samesite를 지정하세요."
+    patterns:
+      - pattern: $R.set_cookie(...)
+      - pattern-not: $R.set_cookie(..., secure=True, ..., httponly=True, ...)
+      - pattern-not: $R.set_cookie(..., httponly=True, ..., secure=True, ...)
+    metadata:
+      qualgate_id: python.cookie-flags
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: SF-12
+      cwe: "CWE-614"

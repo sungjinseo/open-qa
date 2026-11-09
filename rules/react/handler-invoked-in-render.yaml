@@ -1,0 +1,15 @@
+rules:
+  - id: react.handler-invoked-in-render
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "이벤트 핸들러에 함수 호출 결과를 넘깁니다(onClick={fn()}). 렌더링할 때 즉시 실행되고 클릭 시에는 아무것도 하지 않습니다. onClick={fn} 또는 onClick={() => fn(arg)} 형태로 쓰세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    pattern-either:
+      - pattern: <$T onClick={$F(...)} />
+      - pattern: <$T onChange={$F(...)} />
+      - pattern: <$T onSubmit={$F(...)} />
+    metadata:
+      qualgate_id: react.handler-invoked-in-render
+      qualgate_severity: medium
+      qualgate_category: bug

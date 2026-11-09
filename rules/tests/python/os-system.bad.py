@@ -1,4 +1,4 @@
 import os
 
-def clean(path):
-    os.system("rm -rf " + path)
+def ping(host):
+    os.system("ping -c 1 " + host)

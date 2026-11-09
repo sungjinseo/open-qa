@@ -1,8 +1,9 @@
 import logging
 
-def parse(s):
+def load(path):
     try:
-        return int(s)
-    except ValueError:
-        logging.warning("invalid number: %s", s)
-        return 0
+        with open(path) as f:
+            return f.read()
+    except OSError:
+        logging.exception("cannot read %s", path)
+        raise

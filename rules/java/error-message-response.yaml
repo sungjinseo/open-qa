@@ -1,0 +1,17 @@
+rules:
+  - id: java.error-message-response
+    languages: [java]
+    severity: WARNING
+    message: "[행안부 EH-01 오류 메시지 정보노출] 예외 메시지나 스택 트레이스를 HTTP 응답으로 돌려줍니다. 쿼리문·경로·라이브러리 버전 같은 내부 정보가 공격자에게 노출됩니다. 상세 내용은 서버 로그에만 남기고 응답에는 일반 오류 메시지를 쓰세요."
+    pattern-either:
+      - pattern: $E.printStackTrace($RESP.getWriter())
+      - pattern: $RESP.getWriter().println($E.getMessage())
+      - pattern: $RESP.getWriter().print($E.getMessage())
+      - pattern: $RESP.sendError($C, $E.getMessage())
+      - pattern: $RESP.getWriter().println($E.toString())
+    metadata:
+      qualgate_id: java.error-message-response
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: EH-01
+      cwe: "CWE-209"

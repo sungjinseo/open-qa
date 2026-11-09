@@ -1,0 +1,14 @@
+rules:
+  - id: go.jwt-no-verify
+    languages: [go]
+    severity: ERROR
+    message: "[행안부 SF-10 부적절한 전자서명 확인] JWT 서명을 검증하지 않고 내용을 읽거나 none 서명을 허용합니다. 위조된 토큰이 그대로 통과합니다. jwt.Parse에 키와 서명 알고리즘 검사를 지정하세요."
+    pattern-either:
+      - pattern: $P.ParseUnverified(...)
+      - pattern: jwt.UnsafeAllowNoneSignatureType
+    metadata:
+      qualgate_id: go.jwt-no-verify
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: SF-10
+      cwe: "CWE-347"

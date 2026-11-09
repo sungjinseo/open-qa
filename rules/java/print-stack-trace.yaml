@@ -2,10 +2,11 @@ rules:
   - id: java.print-stack-trace
     languages: [java]
     severity: INFO
-    message: "printStackTrace는 표준 오류로만 출력되어 로그 체계에서 빠집니다. 로거로 예외를 기록하세요."
-    pattern: |
-      $E.printStackTrace()
+    message: "[행안부 EH-01 오류 메시지 정보노출] printStackTrace()는 스택 트레이스를 표준 오류로 내보내 로그 정책을 우회하고 내부 구조를 노출합니다. 로거(logger.error(msg, e))로 기록하고 사용자에게는 일반 메시지만 보여주세요."
+    pattern: $E.printStackTrace()
     metadata:
       qualgate_id: java.print-stack-trace
       qualgate_severity: low
-      qualgate_category: maintainability
+      qualgate_category: security
+      qualgate_mois: EH-01
+      cwe: "CWE-209"

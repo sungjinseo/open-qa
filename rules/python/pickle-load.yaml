@@ -2,10 +2,17 @@ rules:
   - id: python.pickle-load
     languages: [python]
     severity: ERROR
-    message: "신뢰할 수 없는 데이터를 pickle로 역직렬화하면 임의 코드 실행 위험이 있습니다. JSON 같은 안전한 형식을 사용하세요."
-    pattern: |
-      pickle.loads(...)
+    message: "[행안부 CE-05 신뢰할 수 없는 데이터의 역직렬화] pickle·marshal·shelve로 역직렬화하면 데이터에 포함된 코드가 실행됩니다. 신뢰할 수 없는 입력이면 원격 코드 실행으로 이어집니다. JSON 같은 데이터 전용 형식을 쓰거나 서명으로 출처를 검증하세요."
+    pattern-either:
+      - pattern: pickle.loads(...)
+      - pattern: pickle.load(...)
+      - pattern: cPickle.loads(...)
+      - pattern: marshal.loads(...)
+      - pattern: shelve.open(...)
+      - pattern: jsonpickle.decode(...)
     metadata:
       qualgate_id: python.pickle-load
       qualgate_severity: high
       qualgate_category: security
+      qualgate_mois: CE-05
+      cwe: "CWE-502"

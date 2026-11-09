@@ -1,0 +1,19 @@
+rules:
+  - id: react.script-src-no-integrity
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "[행안부 SF-15 무결성 검사 없는 코드 다운로드] 외부 CDN 스크립트를 integrity(SRI) 없이 불러옵니다. CDN이 침해되거나 전송 중 변조되면 악성 코드가 페이지에서 실행됩니다. integrity와 crossOrigin 속성을 지정하세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    patterns:
+      - pattern: <script src=$S />
+      - pattern-not: <script integrity=... />
+      - metavariable-regex:
+          metavariable: $S
+          regex: ^["']https?://
+    metadata:
+      qualgate_id: react.script-src-no-integrity
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: SF-15
+      cwe: "CWE-494"

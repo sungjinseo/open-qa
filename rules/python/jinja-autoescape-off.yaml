@@ -1,0 +1,17 @@
+rules:
+  - id: python.jinja-autoescape-off
+    languages: [python]
+    severity: WARNING
+    message: "[행안부 IV-04 크로스사이트 스크립트] Jinja2 환경에서 autoescape를 끄거나 지정하지 않았습니다. 템플릿에 들어간 값이 이스케이프되지 않아 XSS가 됩니다. autoescape=True 또는 select_autoescape()를 사용하세요."
+    pattern-either:
+      - pattern: jinja2.Environment(..., autoescape=False, ...)
+      - pattern: Environment(..., autoescape=False, ...)
+      - patterns:
+          - pattern: jinja2.Environment(...)
+          - pattern-not: jinja2.Environment(..., autoescape=..., ...)
+    metadata:
+      qualgate_id: python.jinja-autoescape-off
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: IV-04
+      cwe: "CWE-79"

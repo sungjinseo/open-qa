@@ -1,0 +1,17 @@
+# Adapted from kr-secure-coding (MIT, (c) 2026 ace30126)
+rules:
+  - id: ts.cookie-insecure
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "[행안부 SF-12 쿠키를 통한 정보노출] 쿠키의 httpOnly 또는 secure 옵션을 껐습니다. 세션 쿠키라면 스크립트로 탈취되거나 평문으로 전송됩니다. httpOnly·secure를 켜고 sameSite를 지정하세요."
+    pattern-either:
+      - pattern: '$R.cookie($N, $V, {..., httpOnly: false, ...})'
+      - pattern: '$R.cookie($N, $V, {..., secure: false, ...})'
+      - pattern: '$C.set($N, $V, {..., httpOnly: false, ...})'
+      - pattern: '$C.set({..., httpOnly: false, ...})'
+    metadata:
+      qualgate_id: ts.cookie-insecure
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: SF-12
+      cwe: "CWE-1004"

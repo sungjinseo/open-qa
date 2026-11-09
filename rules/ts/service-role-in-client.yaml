@@ -1,0 +1,20 @@
+# Adapted from kr-secure-coding (MIT, (c) 2026 ace30126)
+rules:
+  - id: ts.service-role-in-client
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "[행안부 확장 VC-01 클라이언트 번들로 노출되는 비밀키] \"use client\" 파일에서 Supabase service_role 키를 읽습니다. 이 키는 RLS를 무시하는 관리자 키라 브라우저로 나가면 DB 전체가 열립니다. 서버 코드(API 라우트·서버 액션)에서만 쓰세요."
+    patterns:
+      - pattern-inside: |
+          "use client";
+          ...
+      - pattern: process.env.$V
+      - metavariable-regex:
+          metavariable: $V
+          regex: (?i).*service_?role.*
+    metadata:
+      qualgate_id: ts.service-role-in-client
+      qualgate_severity: critical
+      qualgate_category: security
+      qualgate_mois: VC-01
+      cwe: "CWE-798"

@@ -2,10 +2,12 @@ rules:
   - id: go.empty-if-err
     languages: [go]
     severity: ERROR
-    message: "if err != nil 블록이 비어 있으면 오류를 확인만 하고 무시합니다. 에러를 반환하거나 처리하세요."
+    message: "[행안부 EH-02 오류상황 대응 부재] if err != nil 블록이 비어 있어 오류를 확인만 하고 처리하지 않습니다. 실패가 무시된 채 로직이 계속됩니다. 오류를 반환하거나 로깅·복구 처리를 넣으세요."
     pattern: |
-      if err != nil { }
+      if $E != nil { }
     metadata:
       qualgate_id: go.empty-if-err
       qualgate_severity: high
-      qualgate_category: bug
+      qualgate_category: security
+      qualgate_mois: EH-02
+      cwe: "CWE-390"

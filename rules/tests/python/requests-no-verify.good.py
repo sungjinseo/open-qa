@@ -1,4 +1,4 @@
 import requests
 
 def fetch(url):
-    return requests.get(url, timeout=10)
+    return requests.get(url, timeout=5)

@@ -1,0 +1,59 @@
+# Adapted from kr-secure-coding (MIT, (c) 2026 ace30126)
+rules:
+  - id: ts.ssrf
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "[행안부 IV-12 서버사이드 요청 위조] 요청 값을 그대로 서버가 보내는 외부 요청의 주소로 씁니다. 클라우드 메타데이터(169.254.169.254)나 내부 서비스로 요청이 나갈 수 있습니다. 호스트를 허용 목록과 비교하고 사설 IP는 차단하세요."
+    mode: taint
+
+    pattern-sources:
+      - pattern: $REQ.query
+      - pattern: $REQ.body
+      - pattern: $REQ.params
+      - pattern: $REQ.headers
+      - pattern: searchParams.get(...)
+      - pattern: $U.searchParams.get(...)
+      - pattern: $R.nextUrl.searchParams.get(...)
+      - pattern: new URLSearchParams(...).get(...)
+      - patterns:
+          - pattern: $SP.get(...)
+          - pattern-either:
+              - pattern-inside: |
+                  const [$SP] = useSearchParams();
+                  ...
+              - pattern-inside: |
+                  const [$SP, $SET] = useSearchParams();
+                  ...
+              - pattern-inside: |
+                  const $SP = useSearchParams();
+                  ...
+              - pattern-inside: |
+                  const $SP = new URLSearchParams(...);
+                  ...
+      - pattern: await $REQ.json()
+      - pattern: await $REQ.formData()
+
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: fetch($URL, ...)
+              - pattern: axios($URL, ...)
+              - pattern: axios.$M($URL, ...)
+              - pattern: got($URL, ...)
+              - pattern: http.get($URL, ...)
+              - pattern: https.get($URL, ...)
+          - metavariable-regex:
+              metavariable: $URL
+              regex: ^(?!["'`]/)
+          - pattern-not-inside: |
+              "use client";
+              ...
+          - focus-metavariable: $URL
+    pattern-sanitizers:
+      - pattern: assertAllowedHost(...)
+    metadata:
+      qualgate_id: ts.ssrf
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-12
+      cwe: "CWE-918"

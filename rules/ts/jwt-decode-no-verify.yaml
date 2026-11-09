@@ -1,0 +1,16 @@
+# Adapted from kr-secure-coding (MIT, (c) 2026 ace30126)
+rules:
+  - id: ts.jwt-decode-no-verify
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "[행안부 SF-10 부적절한 전자서명 확인] jwt.decode()는 서명을 검사하지 않거나 알고리즘으로 none을 허용합니다. 위조된 토큰이 통과합니다. 인증 판단에는 알고리즘을 고정한 jwt.verify()를 쓰세요."
+    pattern-either:
+      - pattern: jwt.decode(...)
+      - pattern: jsonwebtoken.decode(...)
+      - pattern: '$J.verify($T, $K, {..., algorithms: [..., "none", ...], ...})'
+    metadata:
+      qualgate_id: ts.jwt-decode-no-verify
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: SF-10
+      cwe: "CWE-347"

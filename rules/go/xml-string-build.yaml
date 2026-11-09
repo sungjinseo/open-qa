@@ -1,0 +1,14 @@
+rules:
+  - id: go.xml-string-build
+    languages: [go]
+    severity: INFO
+    message: "[행안부 IV-09 XML 삽입] XML을 문자열 연결·Sprintf로 만들어 파싱합니다. 입력값에 태그가 들어 있으면 XML 구조가 바뀝니다. 구조체를 xml.Marshal로 직렬화하거나 xml.EscapeText로 값을 이스케이프하세요."
+    pattern-either:
+      - pattern: xml.Unmarshal([]byte(fmt.Sprintf(...)), ...)
+      - pattern: xml.Unmarshal([]byte("..." + $X), ...)
+    metadata:
+      qualgate_id: go.xml-string-build
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: IV-09
+      cwe: "CWE-91"

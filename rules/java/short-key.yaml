@@ -1,0 +1,25 @@
+rules:
+  - id: java.short-key
+    languages: [java]
+    severity: WARNING
+    message: "[행안부 SF-07 충분하지 않은 키 길이 사용] RSA·DSA·DH 키 길이가 2048비트 미만입니다. 현재 컴퓨팅 능력으로 해독될 수 있습니다. 2048비트 이상(권장 3072)을 쓰세요."
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-inside: |
+                  KeyPairGenerator $G = KeyPairGenerator.getInstance("$ALG", ...);
+                  ...
+              - pattern: $G.initialize($N)
+          - pattern: KeyPairGenerator.getInstance("$ALG", ...).initialize($N)
+      - metavariable-regex:
+          metavariable: $ALG
+          regex: ^(RSA|DSA|DH|DiffieHellman)$
+      - metavariable-comparison:
+          metavariable: $N
+          comparison: $N < 2048
+    metadata:
+      qualgate_id: java.short-key
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: SF-07
+      cwe: "CWE-326"

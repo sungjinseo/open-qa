@@ -1,0 +1,25 @@
+rules:
+  - id: vue.dynamic-import-route-param
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "[행안부 IV-03 경로 조작 및 자원 삽입] 라우트 파라미터에서 온 값으로 모듈 경로를 만들어 동적으로 불러옵니다. 공격자가 의도하지 않은 모듈이나 번들 안의 파일을 불러오게 만들 수 있습니다. 허용된 모듈 이름 목록(맵)에서 고르세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    mode: taint
+    pattern-sources:
+      - pattern: $R.query
+      - pattern: $R.params
+      - pattern: $R.hash
+
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: import($P)
+              - pattern: require($P)
+          - focus-metavariable: $P
+    metadata:
+      qualgate_id: vue.dynamic-import-route-param
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: IV-03
+      cwe: "CWE-829"

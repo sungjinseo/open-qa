@@ -1,0 +1,12 @@
+rules:
+  - id: ts.var-declaration
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "var 선언은 함수 스코프와 호이스팅 때문에 버그를 만들기 쉽습니다. let 또는 const를 사용하세요."
+    patterns:
+      - pattern: var $X = $V
+      - pattern-regex: (?<![^\s;{(])var\s+[\w$\[{]
+    metadata:
+      qualgate_id: ts.var-declaration
+      qualgate_severity: low
+      qualgate_category: maintainability

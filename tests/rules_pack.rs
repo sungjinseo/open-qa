@@ -3,7 +3,7 @@ use std::process::Command;
 
 fn yamls(root: &Path) -> Vec<PathBuf> {
     let mut v = vec![];
-    for lang in ["java", "kotlin", "python", "react", "vue", "go"] {
+    for lang in ["java", "kotlin", "python", "react", "vue", "go", "ts"] {
         let dir = root.join(lang);
         let n_before = v.len();
         for e in std::fs::read_dir(&dir).unwrap_or_else(|_| panic!("{} 없음", dir.display())) {
@@ -38,7 +38,7 @@ fn every_rule_detects_bad_and_accepts_good() {
         let name = rule.file_stem().unwrap().to_str().unwrap().to_string();
         let ext = match lang.as_str() {
             "java" => "java", "kotlin" => "kt", "python" => "py",
-            "react" => "tsx", "vue" => "vue.ts", _ => "go",
+            "react" => "tsx", "vue" => "vue.ts", "ts" => "ts", _ => "go",
         };
         let t = root.join("tests").join(&lang);
         let bad = t.join(format!("{name}.bad.{ext}"));
@@ -46,6 +46,19 @@ fn every_rule_detects_bad_and_accepts_good() {
         let yaml = std::fs::read_to_string(&rule).unwrap();
         for k in ["qualgate_id", "qualgate_severity", "qualgate_category"] {
             if !yaml.contains(k) { failures.push(format!("{name}: {k} 없음")); }
+        }
+        // 행안부 49 기본 규칙 묶음: 보안 규칙은 항목 ID와 메시지 접두어가 있어야 한다. (kotlin은 기존 규칙 유지)
+        if lang != "kotlin" && yaml.contains("qualgate_category: security") {
+            let mois = yaml.lines().find_map(|l| l.trim().strip_prefix("qualgate_mois:")).map(|v| v.trim().to_string()).unwrap_or_default();
+            if mois.is_empty() { failures.push(format!("{lang}.{name}: qualgate_mois 없음 또는 비어 있음")); }
+            let has_cwe = yaml.lines().any(|l| l.trim().strip_prefix("cwe:").is_some_and(|v| v.trim().trim_matches('"').starts_with("CWE-")));
+            if !has_cwe { failures.push(format!("{lang}.{name}: cwe 메타데이터 없음")); }
+            // message: "[행안부 IV-01 ...]" 또는 "[행안부 확장 VC-01 ...]"의 항목 ID가 qualgate_mois와 같아야 한다.
+            let msg = yaml.lines().find_map(|l| l.trim().strip_prefix("message: \"[행안부 ")).unwrap_or("");
+            let msg = msg.strip_prefix("확장 ").unwrap_or(msg);
+            let id = msg.split(' ').next().unwrap_or("");
+            if msg.is_empty() { failures.push(format!("{lang}.{name}: 메시지가 [행안부 로 시작하지 않음")); }
+            else if id != mois { failures.push(format!("{lang}.{name}: 메시지 항목 ID({id})가 qualgate_mois({mois})와 다름")); }
         }
         if !bad.exists() || !good.exists() { failures.push(format!("{name}: 예제 없음")); continue; }
         let b = scan(&rule, &bad);

@@ -1,6 +1,7 @@
 import java.util.Random;
-class T {
-    int token() {
-        return new Random().nextInt();
+
+class TokenMaker {
+    String token() {
+        return Long.toHexString(new Random().nextLong());
     }
 }

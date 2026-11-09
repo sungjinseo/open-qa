@@ -1,0 +1,20 @@
+rules:
+  - id: python.redos-nested-quantifier
+    languages: [python]
+    severity: INFO
+    message: "[행안부 TS-02 종료되지 않는 반복문 또는 재귀 함수] 정규식에 (a+)+ 처럼 중첩된 반복이 있습니다. 특정 입력에서 매칭 시간이 지수적으로 늘어 서비스가 멈출 수 있습니다(ReDoS). 중첩 반복을 없애거나 입력 길이를 제한하세요."
+    patterns:
+      - pattern-either:
+          - pattern: re.compile($R, ...)
+          - pattern: re.match($R, ...)
+          - pattern: re.search($R, ...)
+          - pattern: re.fullmatch($R, ...)
+      - metavariable-regex:
+          metavariable: $R
+          regex: ^r?["'].*\([^()]*[+*][^()]*\)[+*].*["']$
+    metadata:
+      qualgate_id: python.redos-nested-quantifier
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: TS-02
+      cwe: "CWE-1333"

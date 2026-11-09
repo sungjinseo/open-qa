@@ -1,0 +1,19 @@
+rules:
+  - id: java.unvalidated-security-input
+    languages: [java]
+    severity: WARNING
+    message: "[행안부 IV-15 보안기능 결정에 사용되는 부적절한 입력값] 요청 파라미터·헤더처럼 클라이언트가 바꿀 수 있는 값으로 권한·인증을 판단합니다. 값을 조작해 관리자 기능을 쓸 수 있습니다. 서버 세션이나 서명 검증된 토큰의 값으로 판단하세요."
+    patterns:
+      - pattern: if (<... $R.$M($N) ...>) {...}
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(getParameter|getHeader)$
+      - metavariable-regex:
+          metavariable: $N
+          regex: (?i)^"[^"]*(admin|role|auth|privilege)[^"]*"$
+    metadata:
+      qualgate_id: java.unvalidated-security-input
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: IV-15
+      cwe: "CWE-807"

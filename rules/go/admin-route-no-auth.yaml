@@ -1,0 +1,18 @@
+rules:
+  - id: go.admin-route-no-auth
+    languages: [go]
+    severity: INFO
+    message: "[행안부 SF-01 적절한 인증 없는 중요 기능 허용] /admin 경로 핸들러가 인증·인가 래퍼 없이 바로 등록되어 있습니다. 로그인 없이 관리 기능이 호출될 수 있습니다. 인증 미들웨어로 핸들러를 감싸세요."
+    patterns:
+      - pattern-either:
+          - pattern: http.HandleFunc($P, func($W http.ResponseWriter, $R *http.Request) {...})
+          - pattern: $M.HandleFunc($P, func($W http.ResponseWriter, $R *http.Request) {...})
+      - metavariable-regex:
+          metavariable: $P
+          regex: ^"/admin
+    metadata:
+      qualgate_id: go.admin-route-no-auth
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: SF-01
+      cwe: "CWE-306"

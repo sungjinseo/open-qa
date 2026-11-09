@@ -2,10 +2,14 @@ rules:
   - id: python.sql-fstring
     languages: [python]
     severity: ERROR
-    message: "f-string으로 SQL을 만들면 SQL 인젝션 위험이 있습니다. 쿼리 파라미터 바인딩을 사용하세요."
-    pattern: |
-      $C.execute(f"...")
+    message: "[행안부 IV-01 SQL 삽입] f-string으로 SQL을 만들어 실행합니다. 입력값이 쿼리 구조를 바꿔 데이터를 유출·변조할 수 있습니다. 쿼리 파라미터 바인딩(cursor.execute(sql, params))이나 ORM을 사용하세요."
+    pattern-either:
+      - pattern: $C.execute(f"...", ...)
+      - pattern: $C.executemany(f"...", ...)
+      - pattern: $C.executescript(f"...")
     metadata:
       qualgate_id: python.sql-fstring
       qualgate_severity: high
       qualgate_category: security
+      qualgate_mois: IV-01
+      cwe: "CWE-89"

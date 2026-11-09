@@ -1,0 +1,14 @@
+rules:
+  - id: react.token-in-url
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "[행안부 SF-05 암호화되지 않은 중요정보] 토큰·비밀번호를 URL 쿼리 문자열에 실어 보냅니다. 브라우저 기록·서버 로그·Referer 헤더에 그대로 남습니다. Authorization 헤더나 요청 본문으로 보내세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    pattern-regex: '`[^`]*[?&](token|access_token|password|secret|api_?key)=\$\{'
+    metadata:
+      qualgate_id: react.token-in-url
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: SF-05
+      cwe: "CWE-598"

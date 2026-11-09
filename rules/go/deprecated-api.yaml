@@ -1,0 +1,17 @@
+rules:
+  - id: go.deprecated-api
+    languages: [go]
+    severity: INFO
+    message: "[행안부 AM-02 취약한 API 사용] 사용이 권장되지 않는 암호 API를 씁니다(x509.DecryptPEMBlock은 폐기됨, rsa.EncryptPKCS1v15·DecryptPKCS1v15는 패딩 오라클 공격에 취약해 권장되지 않음). 현대적인 PKCS#8 + AES-GCM, OAEP 방식을 쓰세요."
+    pattern-either:
+      - pattern: x509.DecryptPEMBlock(...)
+      - pattern: x509.IsEncryptedPEMBlock(...)
+      - pattern: x509.EncryptPEMBlock(...)
+      - pattern: rsa.EncryptPKCS1v15(...)
+      - pattern: rsa.DecryptPKCS1v15(...)
+    metadata:
+      qualgate_id: go.deprecated-api
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: AM-02
+      cwe: "CWE-477"

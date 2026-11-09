@@ -9,8 +9,8 @@ SAMPLES=(
   "java:java.system-out:src/main/java/a/Bad.java"
   "kotlin:kotlin.catch-throwable,kotlin.println:src/main/kotlin/a/Bad.kt"
   "python:python.eval:pkg/bad.py"
-  "react:react.eval:src/Bad.tsx"
-  "vue:vue.eval:src/Bad.vue"
+  "react:ts.code-eval:src/Bad.tsx"
+  "vue:ts.code-eval:src/Bad.vue"
   "go:go.ignored-error:pkg/bad.go"
 )
 for sample in "${SAMPLES[@]}"; do

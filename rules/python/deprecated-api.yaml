@@ -1,0 +1,18 @@
+rules:
+  - id: python.deprecated-api
+    languages: [python]
+    severity: INFO
+    message: "[행안부 AM-02 취약한 API 사용] 폐기됐거나 안전하지 않은 API를 씁니다(tempfile.mktemp, ssl.wrap_socket, ssl.PROTOCOL_TLSv1 등). 경쟁 조건이나 취약한 프로토콜 사용으로 이어집니다. tempfile.mkstemp, SSLContext, ssl.PROTOCOL_TLS_CLIENT 등 대체 API를 쓰세요."
+    pattern-either:
+      - pattern: tempfile.mktemp(...)
+      - pattern: ssl.wrap_socket(...)
+      - pattern: ssl.PROTOCOL_TLSv1
+      - pattern: ssl.PROTOCOL_TLSv1_1
+      - pattern: ssl.PROTOCOL_SSLv23
+      - pattern: ssl.PROTOCOL_SSLv3
+    metadata:
+      qualgate_id: python.deprecated-api
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: AM-02
+      cwe: "CWE-477"

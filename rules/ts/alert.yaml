@@ -1,0 +1,15 @@
+rules:
+  - id: ts.alert
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "alert 호출이 남아 있습니다. 사용자 흐름을 막고 디버그 코드로 남기 쉽습니다. 토스트나 모달 같은 UI 컴포넌트를 쓰세요."
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: alert(...)
+              - pattern: window.alert(...)
+          - pattern-not-inside: $A.config.errorHandler = $F
+    metadata:
+      qualgate_id: ts.alert
+      qualgate_severity: info
+      qualgate_category: maintainability

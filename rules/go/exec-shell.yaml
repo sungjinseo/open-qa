@@ -2,10 +2,16 @@ rules:
   - id: go.exec-shell
     languages: [go]
     severity: ERROR
-    message: "sh -c로 명령을 실행하면 입력이 셸에서 해석되어 명령 인젝션 위험이 있습니다. 실행 파일과 인자를 분리해 전달하세요."
-    pattern: |
-      exec.Command("sh", "-c", ...)
+    message: "[행안부 IV-05 운영체제 명령어 삽입] 셸(sh -c, bash -c, cmd /c)로 명령 문자열을 실행합니다. 외부 값이 섞이면 ; 나 && 로 임의 명령이 실행됩니다. exec.Command(\"prog\", args...)로 인자를 분리하고 인자는 허용 목록으로 검증하세요."
+    pattern-either:
+      - pattern: exec.Command("sh", "-c", ...)
+      - pattern: exec.Command("bash", "-c", ...)
+      - pattern: exec.Command("cmd", "/c", ...)
+      - pattern: exec.CommandContext($CTX, "sh", "-c", ...)
+      - pattern: exec.CommandContext($CTX, "bash", "-c", ...)
     metadata:
       qualgate_id: go.exec-shell
       qualgate_severity: critical
       qualgate_category: security
+      qualgate_mois: IV-05
+      cwe: "CWE-78"

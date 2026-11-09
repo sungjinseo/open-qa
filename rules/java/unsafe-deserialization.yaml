@@ -2,10 +2,15 @@ rules:
   - id: java.unsafe-deserialization
     languages: [java]
     severity: ERROR
-    message: "신뢰할 수 없는 데이터를 ObjectInputStream으로 역직렬화하면 임의 코드 실행 위험이 있습니다. JSON 등 안전한 형식이나 ObjectInputFilter를 사용하세요."
-    pattern: |
-      new ObjectInputStream(...)
+    message: "[행안부 CE-05 신뢰할 수 없는 데이터의 역직렬화] 신뢰할 수 없는 데이터를 객체로 역직렬화합니다(ObjectInputStream, XMLDecoder, XStream). 가젯 체인으로 원격 코드가 실행될 수 있습니다. JSON 같은 데이터 전용 형식을 쓰거나 ObjectInputFilter로 허용 클래스를 제한하세요."
+    pattern-either:
+      - pattern: new ObjectInputStream(...)
+      - pattern: new XMLDecoder(...)
+      - pattern: (XStream $X).fromXML(...)
+      - pattern: $M.enableDefaultTyping()
     metadata:
       qualgate_id: java.unsafe-deserialization
       qualgate_severity: high
       qualgate_category: security
+      qualgate_mois: CE-05
+      cwe: "CWE-502"

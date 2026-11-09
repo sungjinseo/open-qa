@@ -1,0 +1,15 @@
+# Adapted from kr-secure-coding (MIT, (c) 2026 ace30126)
+rules:
+  - id: ts.unsafe-deserialize
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "[행안부 CE-05 신뢰할 수 없는 데이터의 역직렬화] node-serialize 같은 라이브러리의 unserialize는 함수까지 복원해 실행합니다. 신뢰할 수 없는 데이터로 원격 코드 실행이 가능합니다. JSON.parse와 스키마 검증을 쓰세요."
+    pattern-either:
+      - pattern: $S.unserialize(...)
+      - pattern: unserialize(...)
+    metadata:
+      qualgate_id: ts.unsafe-deserialize
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: CE-05
+      cwe: "CWE-502"

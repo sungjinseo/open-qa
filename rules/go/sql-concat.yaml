@@ -2,10 +2,18 @@ rules:
   - id: go.sql-concat
     languages: [go]
     severity: ERROR
-    message: "문자열 연결로 SQL을 만들면 SQL 인젝션 위험이 있습니다. ?나 $1 같은 파라미터 바인딩을 사용하세요."
-    pattern: |
-      $DB.Query("..." + $X, ...)
+    message: "[행안부 IV-01 SQL 삽입] SQL을 문자열 연결로 만들어 실행합니다. 입력값이 쿼리 구조를 바꿔 데이터를 유출·변조할 수 있습니다. 플레이스홀더($1, ?)와 인자 바인딩을 사용하세요."
+    patterns:
+      - pattern-either:
+          - pattern: $DB.Query($A + $B, ...)
+          - pattern: $DB.QueryRow($A + $B, ...)
+          - pattern: $DB.Exec($A + $B, ...)
+          - pattern: $DB.QueryContext($CTX, $A + $B, ...)
+          - pattern: $DB.ExecContext($CTX, $A + $B, ...)
+      - pattern-not: $DB.$M("..." + "...", ...)
     metadata:
       qualgate_id: go.sql-concat
       qualgate_severity: high
       qualgate_category: security
+      qualgate_mois: IV-01
+      cwe: "CWE-89"

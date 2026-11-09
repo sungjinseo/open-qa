@@ -1,0 +1,16 @@
+rules:
+  - id: vue.devtools-enabled
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "[행안부 EN-02 제거되지 않고 남은 디버그 코드] Vue devtools·성능 추적을 켜는 설정이 코드에 있습니다. 운영 환경에서 컴포넌트 상태와 스토어 값이 브라우저 확장으로 노출됩니다. 개발 모드(import.meta.env.DEV)에서만 켜세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    pattern-either:
+      - pattern: $A.config.devtools = true
+      - pattern: $A.config.performance = true
+    metadata:
+      qualgate_id: vue.devtools-enabled
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: EN-02
+      cwe: "CWE-489"

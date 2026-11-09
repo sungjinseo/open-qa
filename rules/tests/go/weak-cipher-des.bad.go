@@ -1,10 +1,8 @@
 package enc
 
-import (
-	"crypto/cipher"
-	"crypto/des"
-)
+import "crypto/des"
 
-func New(key []byte) (cipher.Block, error) {
-	return des.NewCipher(key)
+func Make(key []byte) error {
+	_, err := des.NewCipher(key)
+	return err
 }

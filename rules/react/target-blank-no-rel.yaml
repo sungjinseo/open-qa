@@ -2,15 +2,15 @@ rules:
   - id: react.target-blank-no-rel
     languages: [javascript, typescript]
     severity: WARNING
-    message: "target=\"_blank\" 링크에 rel이 없으면 새 창이 window.opener로 원본 페이지를 조작할 수 있습니다. rel=\"noopener noreferrer\"를 추가하세요."
+    message: "[행안부 IV-07 신뢰되지 않은 URL주소로 자동접속 연결] target=\"_blank\" 링크에 rel=\"noopener noreferrer\"가 없습니다. 열린 페이지가 window.opener로 원래 탭의 주소를 바꿔 피싱 페이지로 이동시킬 수 있습니다(reverse tabnabbing). rel을 지정하세요."
     paths:
       include: ["*.jsx", "*.tsx"]
     patterns:
-      - pattern: |
-          <a target="_blank" href=$H />
-      - pattern-not: |
-          <a ... rel=... />
+      - pattern: <a target="_blank" href=$H />
+      - pattern-not: <a ... rel=... />
     metadata:
       qualgate_id: react.target-blank-no-rel
       qualgate_severity: medium
       qualgate_category: security
+      qualgate_mois: IV-07
+      cwe: "CWE-1022"

@@ -1,0 +1,30 @@
+rules:
+  - id: java.xxe
+    languages: [java]
+    severity: ERROR
+    message: "[행안부 IV-08 부적절한 XML 외부개체 참조] XML 파서의 외부 엔티티·DTD 처리를 막지 않았습니다. XML 안에서 서버 파일을 읽거나 내부망으로 요청을 보낼 수 있습니다. disallow-doctype-decl 기능을 켜거나 IS_SUPPORTING_EXTERNAL_ENTITIES를 false로 설정하세요."
+    pattern-either:
+      - patterns:
+          - pattern: $F = DocumentBuilderFactory.newInstance();
+          - pattern-not-inside: |
+              $F = DocumentBuilderFactory.newInstance();
+              ...
+              $F.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+      - patterns:
+          - pattern: $F = SAXParserFactory.newInstance();
+          - pattern-not-inside: |
+              $F = SAXParserFactory.newInstance();
+              ...
+              $F.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+      - patterns:
+          - pattern: $F = XMLInputFactory.newInstance();
+          - pattern-not-inside: |
+              $F = XMLInputFactory.newInstance();
+              ...
+              $F.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+    metadata:
+      qualgate_id: java.xxe
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-08
+      cwe: "CWE-611"

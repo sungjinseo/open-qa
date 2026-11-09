@@ -1,14 +1,22 @@
 rules:
   - id: python.bare-except
     languages: [python]
-    severity: WARNING
-    message: "except만 쓰면 KeyboardInterrupt와 SystemExit까지 잡아 종료를 막습니다. 구체적인 예외 타입을 지정하세요."
-    pattern: |
-      try:
-          ...
-      except:
-          ...
+    severity: INFO
+    message: "[행안부 EH-03 부적절한 예외 처리] except: 나 except BaseException:은 KeyboardInterrupt·SystemExit까지 삼킵니다. 서로 다른 오류를 같은 방식으로 처리하게 됩니다. 처리할 수 있는 구체적인 예외 타입만 잡으세요."
+    pattern-either:
+      - pattern: |
+          try:
+              ...
+          except:
+              ...
+      - pattern: |
+          try:
+              ...
+          except BaseException:
+              ...
     metadata:
       qualgate_id: python.bare-except
-      qualgate_severity: medium
-      qualgate_category: reliability
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: EH-03
+      cwe: "CWE-396"

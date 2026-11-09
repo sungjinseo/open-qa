@@ -1,3 +1,1 @@
-export function Link() {
-  return <a href="javascript:void(0)">열기</a>;
-}
+export const Bad = () => <a href="javascript:void(0)">go</a>;

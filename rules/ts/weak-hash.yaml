@@ -1,0 +1,17 @@
+# Adapted from kr-secure-coding (MIT, (c) 2026 ace30126)
+rules:
+  - id: ts.weak-hash
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "[행안부 SF-04 취약한 암호화 알고리즘 사용] MD5·SHA-1은 충돌이 알려진 취약한 해시입니다. 무결성·서명 용도라면 SHA-256 이상을 쓰세요. 비밀번호 저장에는 bcrypt·argon2를 쓰세요."
+    pattern-either:
+      - pattern: $C.createHash("md5")
+      - pattern: $C.createHash("sha1")
+      - pattern: createHash("md5")
+      - pattern: createHash("sha1")
+    metadata:
+      qualgate_id: ts.weak-hash
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: SF-04
+      cwe: "CWE-328"

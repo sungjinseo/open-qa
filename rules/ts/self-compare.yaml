@@ -1,0 +1,14 @@
+rules:
+  - id: ts.self-compare
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "같은 값을 자기 자신과 비교합니다. 항상 같은 결과가 나오는 오타일 가능성이 큽니다. (NaN 검사라면 Number.isNaN을 쓰세요.)"
+    pattern-either:
+      - pattern: $X == $X
+      - pattern: $X === $X
+      - pattern: $X != $X
+      - pattern: $X !== $X
+    metadata:
+      qualgate_id: ts.self-compare
+      qualgate_severity: medium
+      qualgate_category: bug

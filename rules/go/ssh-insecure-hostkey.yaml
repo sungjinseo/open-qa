@@ -1,0 +1,12 @@
+rules:
+  - id: go.ssh-insecure-hostkey
+    languages: [go]
+    severity: ERROR
+    message: "[행안부 SF-11 부적절한 인증서 유효성 검증] SSH 호스트 키 검증을 건너뜁니다(InsecureIgnoreHostKey). 중간자 공격자의 서버에 접속 정보를 넘길 수 있습니다. known_hosts 기반 knownhosts.New()로 호스트 키를 검증하세요."
+    pattern: ssh.InsecureIgnoreHostKey()
+    metadata:
+      qualgate_id: go.ssh-insecure-hostkey
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: SF-11
+      cwe: "CWE-295"

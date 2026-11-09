@@ -1,0 +1,12 @@
+rules:
+  - id: vue.computed-side-effect
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "computed 안에서 ref 값을 바꿉니다. computed는 순수 계산이어야 하며 부수 효과가 있으면 무한 갱신이나 순서에 의존하는 버그가 생깁니다. 값 변경은 watch나 이벤트 핸들러로 옮기세요."
+    paths:
+      include: ["*.vue.ts", "*.vue.js"]
+    pattern: computed(() => {... $R.value = $V; ...})
+    metadata:
+      qualgate_id: vue.computed-side-effect
+      qualgate_severity: medium
+      qualgate_category: bug

@@ -1,0 +1,17 @@
+# Adapted from kr-secure-coding (MIT, (c) 2026 ace30126)
+rules:
+  - id: ts.empty-catch
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "[행안부 EH-02 오류상황 대응 부재] 예외를 잡고 아무 처리도 하지 않습니다. 인증·결제 같은 실패가 조용히 무시되어 이후 동작이 비정상이 됩니다. 로깅·재시도·사용자 알림 등 적절히 대응하세요."
+    pattern-either:
+      - pattern: |
+          try { ... } catch ($E) {}
+      - pattern: |
+          try { ... } catch {}
+    metadata:
+      qualgate_id: ts.empty-catch
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: EH-02
+      cwe: "CWE-390"

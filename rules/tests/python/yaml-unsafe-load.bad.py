@@ -1,4 +1,4 @@
 import yaml
 
-def read(text):
+def parse(text):
     return yaml.load(text)

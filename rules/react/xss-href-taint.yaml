@@ -1,0 +1,45 @@
+rules:
+  - id: react.xss-href-taint
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "[행안부 IV-04 크로스사이트 스크립트] URL 파라미터에서 온 값을 그대로 링크 href에 씁니다. javascript: 주소를 넣어 클릭 시 스크립트를 실행시킬 수 있습니다. http(s) 또는 / 로 시작하는 주소만 허용하도록 검증하세요."
+    paths:
+      include: ["*.jsx", "*.tsx"]
+    mode: taint
+    pattern-sources:
+      - pattern: searchParams.get(...)
+      - pattern: $U.searchParams.get(...)
+      - pattern: new URLSearchParams(...).get(...)
+      - patterns:
+          - pattern: $SP.get(...)
+          - pattern-either:
+              - pattern-inside: |
+                  const [$SP] = useSearchParams();
+                  ...
+              - pattern-inside: |
+                  const [$SP, $SET] = useSearchParams();
+                  ...
+              - pattern-inside: |
+                  const $SP = useSearchParams();
+                  ...
+              - pattern-inside: |
+                  const $SP = new URLSearchParams(...);
+                  ...
+      - pattern: $ROUTER.query
+      - pattern: useParams()
+      - pattern: window.location.search
+      - pattern: window.location.hash
+
+    pattern-sinks:
+      - patterns:
+          - pattern: <a href={$U} />
+          - focus-metavariable: $U
+    pattern-sanitizers:
+      - pattern: safeUrl(...)
+      - pattern: encodeURIComponent(...)
+    metadata:
+      qualgate_id: react.xss-href-taint
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: IV-04
+      cwe: "CWE-79"
