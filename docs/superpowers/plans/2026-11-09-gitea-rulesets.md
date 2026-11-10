@@ -557,11 +557,11 @@ git commit -m "feat(tekton): qualgate Task, pipeline patch guide and README"
 **Files:**
 - Modify: `tests/gitea_it.sh`, `tests/e2e/run.sh`, `Dockerfile`(필요 시)
 
-- [ ] **Step 1: E2E 갱신**
+- [x] **Step 1: E2E 갱신**
 
 `tests/e2e/run.sh`: 각 언어 샘플을 `init-config`로 만든 설정 디렉터리 + 직접 쓴 `source.json`으로 `scan --config` 실행. 기대 규칙 ID와 커버리지 검사는 유지.
 
-- [ ] **Step 2: Gitea 통합 확장** (`gitea/gitea:1.26.4`)
+- [x] **Step 2: Gitea 통합 확장** (`gitea/gitea:1.26.4`)
 
 설정 저장소 `qg/cfg`(init-config 결과 push)와 대상 저장소 `qg/demo`를 만들고, 토큰 대신 `.git-credentials` 파일(Basic 인증)로 다음을 확인한다.
 1. `fetch-config → scan → publish` 첫 실행: 이슈와 요약 생성, 게이트 결과 파일.
@@ -571,7 +571,7 @@ git commit -m "feat(tekton): qualgate Task, pipeline patch guide and README"
 5. 비기본 브랜치: 이슈 변화 없음, 게이트 결과만.
 기존 검사(재실행 무변화, 재오픈, 무시 라벨)도 유지한다.
 
-- [ ] **Step 3: 전체 검증**
+- [x] **Step 3: 전체 검증**
 
 ```bash
 bash scripts/cargo.sh test                       # rules_pack 포함, run_in_background로 실행(약 20분)
@@ -582,7 +582,7 @@ bash tests/gitea_it.sh
 
 Expected: 모두 통과, 이미지 150MB 이하.
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git commit -m "test: config repository flow in e2e and Gitea integration"
