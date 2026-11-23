@@ -1,0 +1,13 @@
+rules:
+  - id: java.signature-verify-ignored
+    languages: [java]
+    severity: ERROR
+    message: "[행안부 SF-10 부적절한 전자서명 확인] Signature.verify()의 검증 결과(boolean)를 버립니다. 서명이 틀려도 그대로 진행합니다. 반환값이 false면 처리를 중단하세요."
+    pattern: (java.security.Signature $S).verify(...);
+    metadata:
+      qualgate_id: java.signature-verify-ignored
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: SF-10
+      qualgate_owasp_api: ["API2:2023"]
+      cwe: "CWE-347"

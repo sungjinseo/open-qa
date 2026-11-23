@@ -1,0 +1,60 @@
+rules:
+  - id: java.sql-injection-spring
+    mode: taint
+    languages: [java]
+    severity: ERROR
+    message: "[행안부 IV-01 SQL 삽입] 요청 값이 JdbcTemplate·JPA·Hibernate 질의문 문자열로 흘러듭니다(StringBuilder 조립 포함). 질의를 조작해 데이터를 빼내거나 바꿀 수 있습니다. ? 또는 :name 바인딩 파라미터로 값을 넘기세요."
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: (javax.servlet.http.HttpServletRequest $REQ).$GET(...)
+              - pattern: (jakarta.servlet.http.HttpServletRequest $REQ).$GET(...)
+          - metavariable-regex:
+              metavariable: $GET
+              regex: ^(getParameter|getParameterValues|getParameterMap|getHeader|getHeaders|getQueryString|getRequestURI|getRequestURL|getPathInfo|getCookies|getInputStream|getReader)$
+      - pattern: (javax.servlet.http.Cookie $CK).getValue()
+      - pattern: (jakarta.servlet.http.Cookie $CK).getValue()
+      - patterns:
+          - pattern-either:
+              - pattern: $RET $M(..., @$A(...) $T $P, ...) { ... }
+              - pattern: $RET $M(..., @$A $T $P, ...) { ... }
+          - metavariable-regex:
+              metavariable: $A
+              regex: ^(RequestParam|PathVariable|RequestHeader|CookieValue|RequestBody|ModelAttribute|MatrixVariable)$
+          - metavariable-regex:
+              metavariable: $T
+              regex: ^(?!(int|long|short|byte|double|float|boolean|Integer|Long|Short|Byte|Double|Float|Boolean|BigDecimal|BigInteger|UUID|LocalDate|LocalDateTime)$).*
+          - focus-metavariable: $P
+    pattern-sanitizers:
+      - pattern: Integer.parseInt(...)
+      - pattern: Long.parseLong(...)
+    pattern-propagators:
+      - pattern: $SB.append($X)
+        from: $X
+        to: $SB
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: (org.springframework.jdbc.core.JdbcTemplate $J).$M($SQL, ...)
+              - pattern: (org.springframework.jdbc.core.JdbcOperations $J).$M($SQL, ...)
+              - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate $J).$M($SQL, ...)
+              - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations $J).$M($SQL, ...)
+              - pattern: (javax.persistence.EntityManager $J).$M($SQL, ...)
+              - pattern: (jakarta.persistence.EntityManager $J).$M($SQL, ...)
+              - pattern: (org.hibernate.Session $J).$M($SQL, ...)
+              - pattern: (org.hibernate.StatelessSession $J).$M($SQL, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(query|queryForList|queryForObject|queryForMap|queryForRowSet|queryForStream|update|execute|batchUpdate|createQuery|createNativeQuery|createSQLQuery|createSelectionQuery|createMutationQuery|createNativeMutationQuery)$
+          # java.sql-concat이 이미 보고하는 인라인 "..." + x 형태는 중복 보고하지 않는다.
+          - pattern-not: $J.query("..." + $Y, ...)
+          - pattern-not: $J.queryForObject("..." + $Y, ...)
+          - pattern-not: $J.createQuery("..." + $Y, ...)
+          - pattern-not: $J.createNativeQuery("..." + $Y, ...)
+          - focus-metavariable: $SQL
+    metadata:
+      qualgate_id: java.sql-injection-spring
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-01
+      cwe: "CWE-89"

@@ -1,0 +1,66 @@
+rules:
+  - id: java.infinite-loop-recursion
+    languages: [java]
+    severity: INFO
+    message: "[행안부 TS-02 종료되지 않는 반복문 또는 재귀 함수] 빠져나오는 문장(break·return·throw)이 없는 무한 반복문이거나, 기저 조건(제어문) 없이 같은 인자 타입으로 자신을 호출하는 재귀입니다. 의도한 상주 루프인지 확인하고, 아니면 반복·재귀를 끝내는 조건을 두세요."
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: while (true) { ... }
+              - pattern: for (;;) { ... }
+              - pattern: do { ... } while (true);
+          - pattern-not: while (true) { ... break; ... }
+          - pattern-not: while (true) { ... break $LBL; ... }
+          - pattern-not: while (true) { ... return; ... }
+          - pattern-not: while (true) { ... return $RV; ... }
+          - pattern-not: while (true) { ... throw $EX; ... }
+          - pattern-not: for (;;) { ... break; ... }
+          - pattern-not: for (;;) { ... break $LBL; ... }
+          - pattern-not: for (;;) { ... return; ... }
+          - pattern-not: for (;;) { ... return $RV; ... }
+          - pattern-not: for (;;) { ... throw $EX; ... }
+          - pattern-not: do { ... break; ... } while (true);
+          - pattern-not: do { ... return; ... } while (true);
+          - pattern-not: do { ... return $RV; ... } while (true);
+          - pattern-not: do { ... throw $EX; ... } while (true);
+      - patterns:
+          - pattern-either:
+              - patterns:
+                  - pattern-inside: |
+                      $RET $M() { ... }
+                  - pattern-either:
+                      - pattern: $M()
+                      - pattern: this.$M()
+              - patterns:
+                  - pattern-inside: |
+                      $RET $M($T1 $P1) { ... }
+                  - pattern-either:
+                      - pattern: $M(($T1 $A1))
+                      - pattern: this.$M(($T1 $A1))
+              - patterns:
+                  - pattern-inside: |
+                      $RET $M($T1 $P1, $T2 $P2) { ... }
+                  - pattern-either:
+                      - pattern: $M(($T1 $A1), ($T2 $A2))
+                      - pattern: this.$M(($T1 $A1), ($T2 $A2))
+              - patterns:
+                  - pattern-inside: |
+                      $RET $M($T1 $P1, $T2 $P2, $T3 $P3) { ... }
+                  - pattern-either:
+                      - pattern: $M(($T1 $A1), ($T2 $A2), ($T3 $A3))
+                      - pattern: this.$M(($T1 $A1), ($T2 $A2), ($T3 $A3))
+          - pattern-not-inside: |
+              $RET $M(...) { ... if ($IFC) $IFS; ... }
+          - pattern-not-inside: |
+              $TCOND ? $TYES : $TNO
+          - pattern-not-inside: $AND1 && $AND2
+          - pattern-not-inside: $OR1 || $OR2
+          - pattern-not-inside: for (...) $FORS;
+          - pattern-not-inside: while ($WC) $WS;
+    metadata:
+      qualgate_id: java.infinite-loop-recursion
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_kind: hotspot
+      qualgate_mois: TS-02
+      cwe: "CWE-835"

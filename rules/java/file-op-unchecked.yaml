@@ -1,0 +1,17 @@
+rules:
+  - id: java.file-op-unchecked
+    languages: [java]
+    severity: INFO
+    message: "[행안부 EH-03 부적절한 예외 처리] 실패를 boolean으로 알리는 File 메서드(delete·mkdir·mkdirs·createNewFile·renameTo)의 반환값을 버립니다. 실패해도 알 수 없습니다. 반환값을 확인하거나 예외를 던지는 java.nio.file.Files API를 쓰세요."
+    patterns:
+      - pattern: (java.io.File $F).$OP(...);
+      - metavariable-regex:
+          metavariable: $OP
+          regex: ^(delete|mkdir|mkdirs|createNewFile|renameTo)$
+    metadata:
+      qualgate_id: java.file-op-unchecked
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_kind: hotspot
+      qualgate_mois: EH-03
+      cwe: "CWE-754"

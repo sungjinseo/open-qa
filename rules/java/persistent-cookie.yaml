@@ -1,0 +1,19 @@
+rules:
+  - id: java.persistent-cookie
+    languages: [java]
+    severity: INFO
+    message: "[행안부 SF-12 쿠키를 통한 정보노출] 쿠키 만료시간이 하루(86400초)를 넘는 영속 쿠키입니다. 사용자 디스크에 오래 남아 탈취·재사용될 수 있습니다. 만료시간을 기능에 필요한 최소로 줄이고 중요정보는 쿠키에 담지 마세요."
+    patterns:
+      - pattern-either:
+          - pattern: (javax.servlet.http.Cookie $C).setMaxAge($N)
+          - pattern: (jakarta.servlet.http.Cookie $C).setMaxAge($N)
+      - metavariable-comparison:
+          metavariable: $N
+          comparison: $N > 86400
+    metadata:
+      qualgate_id: java.persistent-cookie
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_kind: hotspot
+      qualgate_mois: SF-12
+      cwe: "CWE-539"

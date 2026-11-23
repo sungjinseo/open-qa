@@ -1,0 +1,51 @@
+rules:
+  - id: java.xpath-injection
+    mode: taint
+    languages: [java]
+    severity: ERROR
+    message: "[행안부 IV-09 XML 삽입] 외부 입력이 검증 없이 XPath·XQuery 질의문에 들어갑니다. 질의를 조작해 다른 노드를 읽을 수 있습니다. 질의문은 고정하고 값은 XPathVariableResolver로 넘기거나 특수문자를 제거하세요."
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: (javax.servlet.http.HttpServletRequest $REQ).$GET(...)
+              - pattern: (jakarta.servlet.http.HttpServletRequest $REQ).$GET(...)
+          - metavariable-regex:
+              metavariable: $GET
+              regex: ^(getParameter|getParameterValues|getParameterMap|getHeader|getHeaders|getQueryString|getRequestURI|getRequestURL|getPathInfo|getCookies|getInputStream|getReader)$
+      - pattern: (javax.servlet.http.Cookie $CK).getValue()
+      - pattern: (jakarta.servlet.http.Cookie $CK).getValue()
+      - patterns:
+          - pattern-either:
+              - pattern: $RET $M(..., @$A(...) $T $P, ...) { ... }
+              - pattern: $RET $M(..., @$A $T $P, ...) { ... }
+          - metavariable-regex:
+              metavariable: $A
+              regex: ^(RequestParam|PathVariable|RequestHeader|CookieValue|RequestBody|ModelAttribute|MatrixVariable)$
+          - metavariable-regex:
+              metavariable: $T
+              regex: ^(?!(int|long|short|byte|double|float|boolean|Integer|Long|Short|Byte|Double|Float|Boolean|BigDecimal|BigInteger|UUID|LocalDate|LocalDateTime)$).*
+          - focus-metavariable: $P
+    pattern-sanitizers:
+      - pattern: $X.replaceAll(...)
+    pattern-propagators:
+      - pattern: $SB.append($X)
+        from: $X
+        to: $SB
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: (javax.xml.xpath.XPath $X).compile($Q)
+              - pattern: (javax.xml.xpath.XPath $X).evaluate($Q, ...)
+              - pattern: (javax.xml.xpath.XPath $X).evaluateExpression($Q, ...)
+              - pattern: javax.xml.xpath.XPathFactory.newInstance().newXPath().compile($Q)
+              - pattern: javax.xml.xpath.XPathFactory.newInstance().newXPath().evaluate($Q, ...)
+              - pattern: (javax.xml.xquery.XQConnection $C).prepareExpression($Q, ...)
+              - pattern: (javax.xml.xquery.XQExpression $E).executeQuery($Q)
+              - pattern: (javax.xml.xquery.XQExpression $E).executeCommand($Q)
+          - focus-metavariable: $Q
+    metadata:
+      qualgate_id: java.xpath-injection
+      qualgate_severity: high
+      qualgate_category: security
+      qualgate_mois: IV-09
+      cwe: "CWE-643"
