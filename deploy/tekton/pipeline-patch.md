@@ -30,6 +30,10 @@
         value: 'false'
       - name: FAIL_ON_GATE
         value: $(params.qualgate-fail-on-gate)
+      - name: REPORT_FORMATS
+        value: $(params.qualgate-report-formats)
+      - name: REPORT_NAME
+        value: $(context.pipelineRun.name)
     runAfter:
       - code-test
     taskRef:
@@ -68,7 +72,13 @@
     type: string
     default: 'true'
     description: Fail the pipeline when the quality gate fails
+  - name: qualgate-report-formats
+    type: string
+    default: html,md,xlsx
+    description: Per-language analysis report formats (subset of html, md, xlsx; empty disables)
 ```
+
+보고서는 `shared-data` workspace의 `qualgate-report/`에 `<PipelineRun 이름>-<언어>-analysis-report.<형식>`으로 남습니다(예: `build-jenny-88450-java-analysis-report.html`). 다른 위치가 필요하면 Task 파라미터 `REPORT_DIR`(source workspace 기준 상대 경로)를 지정합니다. 뒤 태스크에서 같은 workspace로 보고서를 업로드하거나 보관할 수 있습니다.
 
 `failure-issue-skip-tasks` 기본값에 `code-analysis`를 포함합니다. qualgate가 상세 이슈를 등록하므로 마지막 Failure Issue 태스크가 같은 실패를 중복 등록하지 않게 합니다.
 

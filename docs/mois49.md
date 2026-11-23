@@ -1,6 +1,6 @@
 # 행정안전부 SW 보안약점 49 점검 범위
 
-행정안전부 「소프트웨어 보안약점 진단가이드」(2021) 구현단계 보안약점 49개 항목과 바이브코딩 SaaS에서 사고가 잦은 확장 항목(VC-01..04)이 기본 규칙에 어떻게 대응하는지 정리한 표입니다. 항목 이름과 순서는 2021판 목차 기준 정리본이며 원문 PDF와의 최종 대조는 남아 있습니다.
+행정안전부 「소프트웨어 보안약점 진단가이드」(2021) 구현단계 보안약점 49개 항목과 바이브코딩 SaaS에서 사고가 잦은 확장 항목(VC-01..07)이 기본 규칙에 어떻게 대응하는지 정리한 표입니다. 항목 이름과 순서는 2021판 목차 기준 정리본이며 원문 PDF와의 최종 대조는 남아 있습니다.
 
 읽는 법
 
@@ -33,8 +33,8 @@
 | IV-15 | 보안기능 결정에 사용되는 부적절한 입력값 | 부분: `java.unvalidated-security-input` | 부분: `python.client-controlled-auth` | 부분: `ts.client-controlled-role`<br>`ts.message-listener-no-origin`† | ts 규칙이 적용됨 | ts 규칙이 적용됨 | 부분: `go.client-controlled-auth` |
 | IV-16 | 메모리 버퍼 오버플로우 | 해당 없음(메모리 관리 언어) | 해당 없음(메모리 관리 언어) | 해당 없음(메모리 관리 언어) | 해당 없음(메모리 관리 언어) | 해당 없음(메모리 관리 언어) | 부분: `go.unsafe-pointer` |
 | IV-17 | 포맷 스트링 삽입 | 부분: `java.format-string` | 부분: `python.format-string` | 해당 없음(템플릿 문자열은 서식 지시자를 해석하지 않음) | 해당 없음(템플릿 문자열은 서식 지시자를 해석하지 않음) | 해당 없음(템플릿 문자열은 서식 지시자를 해석하지 않음) | 부분: `go.format-string` |
-| SF-01 | 적절한 인증 없는 중요 기능 허용 | 부분: `java.authz-permit-all` | 부분: `python.drf-allow-any` | 부분: `ts.admin-route-no-auth` | ts 규칙이 적용됨 | 부분: `vue.router-guard-always-next`<br>+ ts 규칙 적용 | 부분: `go.admin-route-no-auth` |
-| SF-02 | 부적절한 인가 | 수동 확인(대상 객체별 소유권 확인은 코드만으로 판단 불가) | 수동 확인(대상 객체별 소유권 확인은 코드만으로 판단 불가) | 수동 확인(대상 객체별 소유권 확인은 코드만으로 판단 불가) | 수동 확인(대상 객체별 소유권 확인은 코드만으로 판단 불가) | 수동 확인(대상 객체별 소유권 확인은 코드만으로 판단 불가) | 수동 확인(대상 객체별 소유권 확인은 코드만으로 판단 불가) |
+| SF-01 | 적절한 인증 없는 중요 기능 허용 | 부분: `java.authz-permit-all`<br>`java.admin-route-no-auth` | 부분: `python.drf-allow-any`<br>`python.admin-route-no-auth` | 부분: `ts.admin-route-no-auth` | ts 규칙이 적용됨 | 부분: `vue.router-guard-always-next`<br>+ ts 규칙 적용 | 부분: `go.admin-route-no-auth` |
+| SF-02 | 부적절한 인가 | 부분(핫스팟): `java.bola-find-by-path-id` | 부분(핫스팟): `python.bola-get-object` | 부분(핫스팟): `ts.bola-find-by-param` | ts 규칙이 적용됨 | ts 규칙이 적용됨 | 수동 확인(대상 객체별 소유권 확인은 코드만으로 판단 불가) |
 | SF-03 | 중요한 자원에 대한 잘못된 권한 설정 | 부분: `java.permissive-file-permission` | 부분: `python.permissive-file-mode` | 부분: `ts.permissive-file-mode` | ts 규칙이 적용됨 | ts 규칙이 적용됨 | 부분: `go.permissive-file-mode` |
 | SF-04 | 취약한 암호화 알고리즘 사용 | `java.cipher-des`<br>`java.cipher-ecb`<br>`java.weak-hash-md5`<br>`java.weak-hash-sha1` | `python.weak-cipher`<br>`python.weak-hash-md5`<br>`python.weak-hash-sha1` | `ts.weak-cipher`<br>`ts.weak-hash` | ts 규칙이 적용됨 | ts 규칙이 적용됨 | `go.weak-cipher-des`<br>`go.weak-hash-md5`<br>`go.weak-hash-sha1`<br>`go.weak-tls-version` |
 | SF-05 | 암호화되지 않은 중요정보 | 부분: `java.plain-http-url` | 부분: `python.cleartext-protocol` | 부분: `ts.localstorage-token`†<br>`ts.plain-http-url`<br>`ts.postmessage-wildcard`† | 부분: `react.insecure-resource-url`<br>`react.token-in-url`†<br>+ ts 규칙 적용 | 부분: `vue.insecure-baseurl`<br>`vue.token-in-route-query`†<br>+ ts 규칙 적용 | 부분: `go.plain-http-url` |
@@ -67,19 +67,22 @@
 | AM-02 | 취약한 API 사용 | 부분: `java.deprecated-api` | 부분: `python.deprecated-api` | 부분: `ts.deprecated-api` | 부분: `react.deprecated-react-api`<br>`react.string-ref`<br>+ ts 규칙 적용 | ts 규칙이 적용됨 | 부분: `go.deprecated-api` |
 | VC-01 | 클라이언트 번들로 노출되는 비밀키 | 해당 없음(JS/TS 프런트엔드·Node 전용 항목) | 해당 없음(JS/TS 프런트엔드·Node 전용 항목) | `ts.public-env-secret`<br>`ts.service-role-in-client` | ts 규칙이 적용됨 | ts 규칙이 적용됨 | 해당 없음(JS/TS 프런트엔드·Node 전용 항목) |
 | VC-02 | BaaS 접근통제 미설정(Supabase RLS·Firebase 규칙) | 수동 확인(Supabase RLS·Firebase 규칙은 코드가 아닌 설정으로 판단) | 수동 확인(Supabase RLS·Firebase 규칙은 코드가 아닌 설정으로 판단) | 수동 확인(Supabase RLS·Firebase 규칙은 코드가 아닌 설정으로 판단) | 수동 확인(Supabase RLS·Firebase 규칙은 코드가 아닌 설정으로 판단) | 수동 확인(Supabase RLS·Firebase 규칙은 코드가 아닌 설정으로 판단) | 수동 확인(Supabase RLS·Firebase 규칙은 코드가 아닌 설정으로 판단) |
-| VC-03 | 과도하게 열린 CORS | 해당 없음(JS/TS 프런트엔드·Node 전용 항목) | 해당 없음(JS/TS 프런트엔드·Node 전용 항목) | `ts.cors-wildcard` | ts 규칙이 적용됨 | ts 규칙이 적용됨 | 해당 없음(JS/TS 프런트엔드·Node 전용 항목) |
+| VC-03 | 과도하게 열린 CORS | `java.cors-allow-all` | `python.cors-allow-all` | `ts.cors-wildcard` | ts 규칙이 적용됨 | ts 규칙이 적용됨 | `go.cors-allow-all` |
 | VC-04 | 프로토타입 오염 | 해당 없음(JS/TS 프런트엔드·Node 전용 항목) | 해당 없음(JS/TS 프런트엔드·Node 전용 항목) | `ts.prototype-pollution` | ts 규칙이 적용됨 | ts 규칙이 적용됨 | 해당 없음(JS/TS 프런트엔드·Node 전용 항목) |
+| VC-05 | 대량 할당·과도한 속성 노출 | `java.mass-assignment-request-body` | `python.mass-assignment-kwargs`<br>`python.drf-serializer-all-fields` | `ts.mass-assignment-body` | ts 규칙이 적용됨 | ts 규칙이 적용됨 | `go.mass-assignment-bind` |
+| VC-06 | 자원 사용 제한 부재 | 부분: `java.pageable-unbounded-size` | 부분: `python.requests-no-timeout` | 부분: `ts.multer-no-limits` | ts 규칙이 적용됨 | ts 규칙이 적용됨 | 부분: `go.request-body-unbounded` |
+| VC-07 | 만료 없는 인증 토큰 | `java.jwt-no-expiry` | `python.jwt-no-expiry` | `ts.jwt-no-expiry` | ts 규칙이 적용됨 | ts 규칙이 적용됨 | `go.jwt-no-expiry` |
 
 ## 규칙 수
 
 | 폴더 | 전체 | 행안부 항목에 연결된 보안 규칙 | 품질·버그 규칙 |
 |---|---|---|---|
-| java | 57 | 51 | 6 |
-| python | 57 | 52 | 5 |
-| ts | 51 | 46 | 5 |
+| java | 70 | 64 | 6 |
+| python | 64 | 59 | 5 |
+| ts | 55 | 50 | 5 |
 | react | 21 | 13 | 8 |
 | vue | 20 | 11 | 9 |
-| go | 57 | 48 | 9 |
+| go | 61 | 52 | 9 |
 | kotlin | 20 | 0 | 20 |
 
 kotlin은 이번 개편 대상이 아니라 기존 규칙을 그대로 둡니다(행안부 항목 연결 없음).
@@ -117,3 +120,11 @@ kotlin은 이번 개편 대상이 아니라 기존 규칙을 그대로 둡니다
 - `java.catch-throwable`
 - `java.throws-generic-exception`
 - `ts.prototype-pollution`
+- `java.admin-route-no-auth`
+- `python.admin-route-no-auth`
+- `java.bola-find-by-path-id`
+- `python.bola-get-object`
+- `ts.bola-find-by-param`
+- `java.cors-allow-all`
+- `python.cors-allow-all`
+- `go.cors-allow-all`

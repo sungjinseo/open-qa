@@ -24,7 +24,7 @@
 
 5. PipelineRun에서 `qualgate-config-repo`를 `owner/qualgate-config` 형식으로 지정합니다. 기존 `gitconfig` workspace의 `.git-credentials`를 통해 설정 저장소 읽기와 대상 저장소 이슈·라벨 쓰기 권한을 제공합니다.
 
-Task는 `fetch-config → scan → publish` 순서로 실행합니다. 프로젝트 테스트는 이 Task 전에 실행해 커버리지 리포트를 만들어야 합니다. `fetch-config`는 설정과 신규 코드 범위를 받고, `scan`은 `/work/out/result.json`에 분석 결과를 씁니다. `publish`는 게이트 결과(`passed` 또는 `failed`)를 Tekton result `gate`에 씁니다.
+Task는 `fetch-config → fetch-rules → scan → report → publish` 순서로 실행합니다. 프로젝트 테스트는 이 Task 전에 실행해 커버리지 리포트를 만들어야 합니다. `fetch-config`는 설정과 신규 코드 범위를 받고, `scan`은 `/work/out/result.json`에 분석 결과를 씁니다. `report`는 언어별 분석 보고서를 source workspace의 `REPORT_DIR`(기본 `qualgate-report/`)에 쓰고, `publish`는 게이트 결과(`passed` 또는 `failed`)를 Tekton result `gate`에 씁니다.
 
 ## 설정 저장소
 
@@ -47,9 +47,20 @@ projects/<owner>/<repo>.toml  # 프로젝트 룰셋, 게이트, 커버리지 설
 | `catalog --json` | 규칙 카탈로그 JSON 출력 |
 | `fetch-config --repo <owner/repo> --branch <branch> --commit <sha> --config-repo <owner/repo> --ref <ref> --out <dir>` | Gitea에서 설정과 신규 코드 정보를 받음 |
 | `scan --src <dir> --config <dir> --out <dir>` | 네트워크 없이 코드를 분석하고 `result.json` 생성 |
+| `report --out <dir> [--src <dir>] [--format html,md,xlsx] [--report-dir <dir>] [--name <prefix>]` | `result.json`으로 언어별 분석 보고서 생성 |
 | `publish --repo <owner/repo> --out <dir> [--gate-result <file>] [--fail-on-gate true|false]` | 게이트 판정 및 기본 브랜치의 Gitea 이슈 동기화 |
 
 `publish`의 `--gate-result`는 줄바꿈 없는 `passed` 또는 `failed`를 씁니다. 게이트 실패 종료 코드는 기본적으로 1이며, `--fail-on-gate false`면 결과는 `failed`로 남기고 종료 코드 0을 반환합니다.
+
+## 분석 보고서
+
+`report`는 코드 파일이나 위반이 있는 언어(java, kotlin, python, go, ts, react, vue)마다 `<name>-<언어>-analysis-report.<형식>`을 씁니다. 형식은 `--format`(Tekton `REPORT_FORMATS`)에 `html`, `md`, `xlsx`를 쉼표로 지정하며 `[html, md, xlsx]` 표기도 받습니다. 빈 값이면 보고서를 만들지 않습니다.
+
+- 위반은 규칙 ID의 언어(`java.sql-concat` → java)로, 분량·커버리지·중복은 파일 확장자로 나눕니다(`.tsx`·`.jsx`는 react, `.vue`는 vue, 그 밖의 JS/TS는 ts).
+- 유형은 SonarQube 표기를 따릅니다. `security` 분류는 VULNERABILITY, `bug`·`reliability`는 BUG, 그 밖은 CODE_SMELL, 핫스팟은 SECURITY_HOTSPOT입니다. 등급은 해당 유형 위반의 가장 높은 심각도로 정합니다(없음 A, LOW B, MEDIUM C, HIGH D, CRITICAL E).
+- HTML은 요약, OWASP API Top 10 항목별 집계, 규칙별 카드, 규칙 설명과 예시(규칙 저장소 `rules/tests/<언어>/<이름>.bad.*`·`.good.*`), 위치별 코드 조각(`--src`가 있을 때, 규칙마다 30곳), 핫스팟, 중복, 전체 위치 표를 담습니다. Markdown은 같은 내용을 코드 조각 없이, XLSX는 `Summary`, `Issues`, `Rules`, `Security Hotspots`, `Duplications` 시트로 담습니다.
+- 게이트는 publish 전의 예비 판정입니다. 신규 핫스팟이 있으면 검토율 조건은 `판정 대기`로 두고 publish가 판정합니다. 최종 결과는 Tekton result `gate`와 요약 이슈를 보세요.
+- Tekton에서 `report` 단계는 실패해도 경고만 남기고 publish를 계속합니다. source workspace의 `REPORT_DIR`에 쓸 권한(이미지 사용자 uid 10001)이 있어야 합니다.
 
 ## 환경 변수와 인증
 
@@ -69,6 +80,7 @@ projects/<owner>/<repo>.toml  # 프로젝트 룰셋, 게이트, 커버리지 설
 |---|---|---|---|
 | `fetch-config`, `validate-config`, `init-config`, `catalog` | 성공 | — | 설정·실행 오류 |
 | `scan` | 분석 성공 | — | 설정·Opengrep 등 실행 오류 |
+| `report` | 보고서 작성(또는 형식 없음) | — | 결과 형식·형식 이름·쓰기 오류 |
 | `publish` | 게이트 통과 또는 `--fail-on-gate false` | 게이트 실패 | Gitea·결과 형식 등 실행 오류 |
 
 측정할 수 있는 게이트 조건이 하나도 없으면 경고를 출력하고 통과합니다. 측정되지 않은 지표는 0으로 취급하지 않습니다. 다만 `coverage.required = true`인데 커버리지를 얻지 못하면 커버리지 게이트 조건은 실패합니다.
@@ -96,6 +108,6 @@ Task는 source, basic-auth, 선택 CA workspace를 사용하고 결과 파일은
 ## 제한과 출처
 
 - 이미지는 amd64를 지원합니다.
-- 기본 규칙은 행정안전부 「소프트웨어 보안약점 진단가이드」를 기준으로 작성했습니다. 대응 범위는 [docs/mois49.md](docs/mois49.md)에 있습니다. 오탐률은 사내 저장소 검증이 더 필요합니다.
+- 기본 규칙은 행정안전부 「소프트웨어 보안약점 진단가이드」를 기준으로 작성했습니다. 대응 범위는 [docs/mois49.md](docs/mois49.md)에 있습니다. OWASP API Security Top 10 (2023) 항목별 대응 범위와 정적 분석으로 다룰 수 없는 항목은 [docs/owasp-api-top10.md](docs/owasp-api-top10.md)에 있습니다. 규칙의 `metadata.qualgate_owasp_api` 값은 보고서의 OWASP 항목별 집계와 `catalog --json`의 `owasp_api`에 나옵니다. 오탐률은 사내 저장소 검증이 더 필요합니다.
 - SonarSource/sonarqube의 이슈 추적과 중복 블록 알고리즘을 LGPL-3.0 조건에 따라 포팅했습니다. Opengrep은 수정 없이 외부 프로세스로 실행합니다. 추가 출처와 라이선스는 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)에 있습니다.
 - 프로젝트 라이선스는 LGPL-3.0입니다([LICENSE](LICENSE)).

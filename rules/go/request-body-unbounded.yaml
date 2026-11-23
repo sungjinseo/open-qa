@@ -1,0 +1,24 @@
+rules:
+  - id: go.request-body-unbounded
+    languages: [go]
+    severity: WARNING
+    message: "[행안부 확장 VC-06 자원 사용 제한 부재] 요청 본문을 크기 제한 없이 읽습니다. 매우 큰 본문 하나로 메모리가 고갈될 수 있습니다. 읽기 전에 r.Body = http.MaxBytesReader(w, r.Body, 상한)으로 크기를 제한하세요."
+    patterns:
+      - pattern-inside: |
+          func $F($W http.ResponseWriter, $R *http.Request) {
+            ...
+          }
+      - pattern-either:
+          - pattern: io.ReadAll($R.Body)
+          - pattern: ioutil.ReadAll($R.Body)
+          - pattern: json.NewDecoder($R.Body)
+      - pattern-not-inside: |
+          $R.Body = http.MaxBytesReader(...)
+          ...
+    metadata:
+      qualgate_id: go.request-body-unbounded
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: VC-06
+      qualgate_owasp_api: ["API4:2023"]
+      cwe: "CWE-770"

@@ -1,0 +1,15 @@
+rules:
+  - id: go.jwt-no-expiry
+    languages: [go]
+    severity: WARNING
+    message: "[행안부 확장 VC-07 만료 없는 인증 토큰] JWT를 만료 시간(exp) 없이 발급합니다. 토큰이 유출되면 영구히 쓸 수 있습니다. 클레임에 \"exp\"를 넣어 짧게 만료시키세요."
+    patterns:
+      - pattern: jwt.NewWithClaims($M, jwt.MapClaims{...})
+      - pattern-not: 'jwt.NewWithClaims($M, jwt.MapClaims{..., "exp": $E, ...})'
+    metadata:
+      qualgate_id: go.jwt-no-expiry
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: VC-07
+      qualgate_owasp_api: ["API2:2023"]
+      cwe: "CWE-613"

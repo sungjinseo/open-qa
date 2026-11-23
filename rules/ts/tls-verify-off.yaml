@@ -12,4 +12,5 @@ rules:
       qualgate_severity: high
       qualgate_category: security
       qualgate_mois: SF-11
+      qualgate_owasp_api: ["API8:2023", "API10:2023"]
       cwe: "CWE-295"

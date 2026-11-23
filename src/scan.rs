@@ -111,6 +111,7 @@ pub fn scan(src: &Path, config_dir: &Path, repo: &str, rules_root: &Path, opengr
     unanalyzed.dedup();
 
     let coverage_required_missing = p.coverage.required && metrics.coverage.is_none();
+    let languages = lang_stats(&code, &prod, &d.clones, &d.total_lines, &loaded.map, has_cov);
     Ok(ScanResult {
         schema: SCHEMA, commit, branch,
         findings: outcome.findings,
@@ -126,5 +127,28 @@ pub fn scan(src: &Path, config_dir: &Path, repo: &str, rules_root: &Path, opengr
         new_hotspots,
         new_code_measured: changed.is_some(),
         coverage_required_missing,
+        languages,
     })
+}
+
+/// 보고서 언어별 파일 수, 줄 수, 커버리지, 중복률.
+fn lang_stats(code: &[String], prod: &[String], clones: &[CloneGroup], total_lines: &std::collections::BTreeMap<String, u32>, cov: &CoverageMap, has_cov: bool) -> std::collections::BTreeMap<String, LangStats> {
+    let mut out: std::collections::BTreeMap<String, LangStats> = std::collections::BTreeMap::new();
+    let prod_set: std::collections::BTreeSet<&str> = prod.iter().map(String::as_str).collect();
+    for f in code {
+        let Some(k) = select::report_lang(f) else { continue };
+        let st = out.entry(k.to_string()).or_default();
+        if prod_set.contains(f.as_str()) { st.files += 1 } else { st.test_files += 1 }
+    }
+    for (k, st) in out.iter_mut() {
+        let mine = |p: &str| select::report_lang(p) == Some(k.as_str());
+        let lines: std::collections::BTreeMap<String, u32> = total_lines.iter().filter(|(p, _)| mine(p)).map(|(p, n)| (p.clone(), *n)).collect();
+        st.lines = lines.values().map(|n| u64::from(*n)).sum();
+        st.duplicated_lines = gate::duplication(clones, &lines, None);
+        if has_cov {
+            let m: CoverageMap = cov.iter().filter(|(p, _)| mine(p)).map(|(p, l)| (p.clone(), l.clone())).collect();
+            st.coverage = gate::coverage_pct(&m, None);
+        }
+    }
+    out
 }

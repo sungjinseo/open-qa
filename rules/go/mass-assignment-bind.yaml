@@ -1,0 +1,39 @@
+rules:
+  - id: go.mass-assignment-bind
+    languages: [go]
+    severity: WARNING
+    message: "[행안부 확장 VC-05 대량 할당·과도한 속성 노출] 요청 본문을 바인딩한 구조체를 그대로 저장합니다. 요청에 Role·OwnerID 같은 필드를 넣으면 그대로 저장됩니다(Mass Assignment). 요청 전용 구조체로 받아 허용한 필드만 모델에 옮기세요."
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-either:
+                  - pattern-inside: |
+                      if $E := $C.$BIND(&$X); $COND {
+                        ...
+                      }
+                      ...
+                  - pattern-inside: |
+                      $C.$BIND(&$X)
+                      ...
+              - metavariable-regex:
+                  metavariable: $BIND
+                  regex: ^(Bind|BindJSON|ShouldBind|ShouldBindJSON)$
+          - pattern-inside: |
+              if $E := json.NewDecoder($R.Body).Decode(&$X); $COND {
+                ...
+              }
+              ...
+          - pattern-inside: |
+              json.NewDecoder($R.Body).Decode(&$X)
+              ...
+      - pattern-either:
+          - pattern: $DB.Save(&$X)
+          - pattern: $DB.Create(&$X)
+          - pattern: $DB.Updates(&$X)
+    metadata:
+      qualgate_id: go.mass-assignment-bind
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: VC-05
+      qualgate_owasp_api: ["API3:2023"]
+      cwe: "CWE-915"

@@ -1,0 +1,35 @@
+rules:
+  - id: java.bola-find-by-path-id
+    languages: [java]
+    severity: INFO
+    message: "[행안부 SF-02 부적절한 인가] 경로의 ID로 객체를 바로 조회·삭제하고, 요청한 사용자가 그 객체의 소유자인지 확인하는 코드가 보이지 않습니다. ID만 바꿔 다른 사용자의 데이터에 접근할 수 있습니다(BOLA). 인증 사용자 기준으로 조회(findByIdAndOwnerId 등)하거나 @PreAuthorize·@PostAuthorize로 소유권을 확인하세요."
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              $R $M(..., @PathVariable $T $ID, ...) { ... }
+          - pattern-inside: |
+              $R $M(..., @PathVariable(...) $T $ID, ...) { ... }
+      - pattern-either:
+          - pattern: $REPO.findById($ID)
+          - pattern: $REPO.getById($ID)
+          - pattern: $REPO.getReferenceById($ID)
+          - pattern: $REPO.getOne($ID)
+          - pattern: $REPO.deleteById($ID)
+      - pattern-not-inside: |
+          $R $M(..., Principal $U, ...) { ... }
+      - pattern-not-inside: |
+          $R $M(..., @AuthenticationPrincipal $UT $U, ...) { ... }
+      - pattern-not-inside: |
+          @PreAuthorize(...)
+          $R $M(...) { ... }
+      - pattern-not-inside: |
+          @PostAuthorize(...)
+          $R $M(...) { ... }
+    metadata:
+      qualgate_id: java.bola-find-by-path-id
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_kind: hotspot
+      qualgate_mois: SF-02
+      qualgate_owasp_api: ["API1:2023"]
+      cwe: "CWE-639"

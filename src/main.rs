@@ -28,6 +28,18 @@ enum Cmd {
         #[arg(long)] config: PathBuf,
         #[arg(long, default_value = "/out")] out: PathBuf,
     },
+    /// result.json으로 언어별 분석 보고서(html, md, xlsx)를 씁니다. 네트워크가 필요 없습니다.
+    Report {
+        #[arg(long, default_value = "/out")] out: PathBuf,
+        /// 위치별 코드 조각을 읽을 소스 디렉터리. 없으면 조각 없이 씁니다.
+        #[arg(long)] src: Option<PathBuf>,
+        /// 보고서 형식. 쉼표로 여러 개(html,md,xlsx). `[html, md, xlsx]`도 받습니다. 비우면 만들지 않습니다.
+        #[arg(long = "format", value_delimiter = ',', default_value = "html,md,xlsx")] formats: Vec<String>,
+        /// 보고서를 쓸 디렉터리(기본: <out>/report).
+        #[arg(long)] report_dir: Option<PathBuf>,
+        /// 파일 이름 앞부분. <name>-<언어>-analysis-report.<형식> (기본: 대상 저장소 이름).
+        #[arg(long)] name: Option<String>,
+    },
     /// result.json을 Gitea 이슈에 반영합니다. 코드를 읽지 않습니다.
     Publish {
         #[arg(long)] repo: String,
@@ -79,6 +91,28 @@ fn load_result(out: &Path) -> Result<ScanResult> {
     let v: serde_json::Value = serde_json::from_str(&t).context("result.json 형식 오류")?;
     if v["schema"] != SCHEMA { anyhow::bail!("result.json 스키마 {}을(를) 지원하지 않습니다 (지원: {SCHEMA})", v["schema"]); }
     serde_json::from_value(v).context("result.json 형식 오류")
+}
+
+struct ReportArgs { out: PathBuf, src: Option<PathBuf>, formats: Vec<String>, report_dir: Option<PathBuf>, name: Option<String> }
+
+fn do_report(a: ReportArgs) -> Result<()> {
+    let formats = qualgate::report::parse_formats(&a.formats)?;
+    if formats.is_empty() { println!("보고서 형식이 지정되지 않아 보고서를 만들지 않습니다"); return Ok(()); }
+    let r = load_result(&a.out)?;
+    let catalog = load_catalog()?;
+    let root = rules_root();
+    let name = a.name.filter(|n| !n.trim().is_empty()).unwrap_or_else(|| {
+        r.config_source.get("repo").and_then(|v| v.as_str()).and_then(|s| s.rsplit('/').next()).unwrap_or("qualgate").to_string()
+    });
+    let inp = qualgate::report::Input {
+        result: &r, catalog: &catalog, rules_root: &root, src: a.src.as_deref(), name,
+        date: qualgate::fetch::rfc3339(std::time::SystemTime::now())[..10].to_string(),
+    };
+    let dir = a.report_dir.unwrap_or_else(|| a.out.join("report"));
+    let files = qualgate::report::write_all(&inp, &formats, &dir)?;
+    if files.is_empty() { println!("보고서를 만들 언어가 없습니다(코드 파일과 위반이 없음)"); }
+    for f in &files { println!("보고서: {}", f.display()); }
+    Ok(())
 }
 
 fn load_catalog() -> Result<qualgate::catalog::Catalog> {
@@ -150,6 +184,7 @@ fn run(cli: Cli) -> Result<i32> {
             Ok(0)
         }
         Cmd::Scan { src, config, out } => { do_scan(&src, &config, &out)?; Ok(0) }
+        Cmd::Report { out, src, formats, report_dir, name } => { do_report(ReportArgs { out, src, formats, report_dir, name })?; Ok(0) }
         Cmd::Publish { repo, out, gate_result, fail_on_gate } => { let r = load_result(&out)?; do_publish(&r, &repo, gate_result.as_deref(), fail_on_gate) }
         Cmd::ValidateConfig { config_dir } => validate_config(&config_dir),
         Cmd::InitConfig { out } => {

@@ -17,4 +17,5 @@ rules:
       qualgate_category: security
       qualgate_kind: hotspot
       qualgate_mois: VC-03
+      qualgate_owasp_api: ["API8:2023"]
       cwe: "CWE-942"

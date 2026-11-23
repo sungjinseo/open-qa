@@ -1,0 +1,33 @@
+rules:
+  - id: python.bola-get-object
+    languages: [python]
+    severity: INFO
+    message: "[행안부 SF-02 부적절한 인가] 뷰가 경로의 ID로 객체를 바로 조회하고 소유자 조건이 없습니다. ID만 바꿔 다른 사용자의 데이터에 접근할 수 있습니다(BOLA). 조회 조건에 owner=request.user 같은 소유자 조건을 넣거나 조회 뒤 권한을 확인하세요."
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              @$APP.$RT(...)
+              def $V(..., $ID, ...):
+                ...
+          - pattern-inside: |
+              def $V(request, ..., $ID, ...):
+                ...
+      - metavariable-regex:
+          metavariable: $ID
+          regex: ^\w*(id|pk)$
+      - pattern-either:
+          - pattern: get_object_or_404($MODEL, pk=$ID)
+          - pattern: get_object_or_404($MODEL, id=$ID)
+          - pattern: $MODEL.objects.get(pk=$ID)
+          - pattern: $MODEL.objects.get(id=$ID)
+          - pattern: $MODEL.query.get($ID)
+          - pattern: $MODEL.query.get_or_404($ID)
+          - pattern: db.session.get($MODEL, $ID)
+    metadata:
+      qualgate_id: python.bola-get-object
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_kind: hotspot
+      qualgate_mois: SF-02
+      qualgate_owasp_api: ["API1:2023"]
+      cwe: "CWE-639"

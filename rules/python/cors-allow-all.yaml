@@ -1,0 +1,19 @@
+rules:
+  - id: python.cors-allow-all
+    languages: [python]
+    severity: INFO
+    message: "[행안부 확장 VC-03 과도하게 열린 CORS] CORS를 모든 출처(*)에 열었습니다. 인증이 필요한 API라면 다른 사이트의 스크립트가 사용자 권한으로 호출할 수 있습니다. 허용할 도메인을 origins·allow_origins·CORS_ALLOWED_ORIGINS에 명시하세요."
+    pattern-either:
+      - pattern: CORS($APP)
+      - pattern: CORS($APP, ..., origins="*", ...)
+      - pattern: CORS_ALLOW_ALL_ORIGINS = True
+      - pattern: CORS_ORIGIN_ALLOW_ALL = True
+      - pattern: '$APP.add_middleware(CORSMiddleware, ..., allow_origins=["*"], ...)'
+    metadata:
+      qualgate_id: python.cors-allow-all
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_kind: hotspot
+      qualgate_mois: VC-03
+      qualgate_owasp_api: ["API8:2023"]
+      cwe: "CWE-942"

@@ -1,0 +1,17 @@
+rules:
+  - id: ts.multer-no-limits
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "[행안부 확장 VC-06 자원 사용 제한 부재] multer에 limits(fileSize·files)를 지정하지 않았습니다. 큰 파일이나 많은 파일을 올려 디스크·메모리를 고갈시킬 수 있습니다. limits: { fileSize, files }로 상한을 두세요."
+    patterns:
+      - pattern-either:
+          - pattern: multer()
+          - pattern: multer({...})
+      - pattern-not: 'multer({..., limits: $L, ...})'
+    metadata:
+      qualgate_id: ts.multer-no-limits
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: VC-06
+      qualgate_owasp_api: ["API4:2023"]
+      cwe: "CWE-400"

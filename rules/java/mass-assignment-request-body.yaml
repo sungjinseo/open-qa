@@ -1,0 +1,25 @@
+rules:
+  - id: java.mass-assignment-request-body
+    languages: [java]
+    severity: WARNING
+    message: "[행안부 확장 VC-05 대량 할당·과도한 속성 노출] @RequestBody로 받은 객체를 그대로 저장합니다. 요청에 role·owner·price 같은 필드를 넣으면 사용자가 바꾸면 안 되는 값까지 바뀝니다(Mass Assignment). 요청 전용 DTO로 받아 허용한 필드만 엔티티에 옮기세요."
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              $R $M(..., @RequestBody $T $P, ...) { ... }
+          - pattern-inside: |
+              $R $M(..., @Valid @RequestBody $T $P, ...) { ... }
+          - pattern-inside: |
+              $R $M(..., @RequestBody @Valid $T $P, ...) { ... }
+      - pattern-either:
+          - pattern: $REPO.save($P)
+          - pattern: $REPO.saveAndFlush($P)
+          - pattern: $EM.persist($P)
+          - pattern: $EM.merge($P)
+    metadata:
+      qualgate_id: java.mass-assignment-request-body
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: VC-05
+      qualgate_owasp_api: ["API3:2023"]
+      cwe: "CWE-915"

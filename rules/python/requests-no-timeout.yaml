@@ -1,0 +1,18 @@
+rules:
+  - id: python.requests-no-timeout
+    languages: [python]
+    severity: WARNING
+    message: "[행안부 확장 VC-06 자원 사용 제한 부재] requests 호출에 timeout이 없습니다. 상대 서버가 응답하지 않으면 요청 스레드가 무한히 묶여 서비스 전체가 멈출 수 있습니다. timeout=(연결, 읽기) 초를 지정하세요."
+    patterns:
+      - pattern: requests.$M(...)
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(get|post|put|patch|delete|head|options|request)$
+      - pattern-not: requests.$M(..., timeout=$T, ...)
+    metadata:
+      qualgate_id: python.requests-no-timeout
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_mois: VC-06
+      qualgate_owasp_api: ["API4:2023", "API10:2023"]
+      cwe: "CWE-400"

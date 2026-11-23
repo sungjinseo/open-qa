@@ -1,0 +1,45 @@
+rules:
+  - id: python.admin-route-no-auth
+    languages: [python]
+    severity: INFO
+    message: "[행안부 SF-01 적절한 인증 없는 중요 기능 허용] 관리·내부 경로(/admin, /internal, /manage) 핸들러에 인증·권한 데코레이터가 보이지 않습니다. 일반 사용자나 비로그인 사용자도 관리 기능을 호출할 수 있습니다. login_required와 권한 검사 데코레이터(또는 FastAPI의 권한 Depends)를 붙이세요."
+    patterns:
+      - pattern: |
+          @$APP.$R($P, ...)
+          def $F(...):
+            ...
+      - metavariable-regex:
+          metavariable: $R
+          regex: ^(route|get|post|put|patch|delete)$
+      - metavariable-regex:
+          metavariable: $P
+          regex: ^["']/(admin|internal|manage)
+      - pattern-not: |
+          @login_required
+          def $F(...):
+            ...
+      - pattern-not: |
+          @admin_required
+          def $F(...):
+            ...
+      - pattern-not: |
+          @roles_required(...)
+          def $F(...):
+            ...
+      - pattern-not: |
+          @permission_required(...)
+          def $F(...):
+            ...
+      - pattern-not: |
+          @jwt_required(...)
+          def $F(...):
+            ...
+      - pattern-not-regex: Depends\((get_current_(admin|active_admin|superuser)|require_\w+|verify_\w+)\)
+    metadata:
+      qualgate_id: python.admin-route-no-auth
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_kind: hotspot
+      qualgate_mois: SF-01
+      qualgate_owasp_api: ["API5:2023"]
+      cwe: "CWE-285"

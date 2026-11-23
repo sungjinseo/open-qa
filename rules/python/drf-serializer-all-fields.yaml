@@ -1,0 +1,17 @@
+rules:
+  - id: python.drf-serializer-all-fields
+    languages: [python]
+    severity: WARNING
+    message: "[행안부 확장 VC-05 대량 할당·과도한 속성 노출] DRF 시리얼라이저가 fields = \"__all__\"로 모델의 모든 필드를 주고받습니다. 비밀번호 해시·권한·내부 상태가 응답에 나가고, 쓰기 요청으로 바뀔 수도 있습니다. 노출할 필드를 목록으로 지정하고 바뀌면 안 되는 필드는 read_only_fields에 두세요."
+    patterns:
+      - pattern-inside: |
+          class Meta:
+            ...
+      - pattern: fields = "__all__"
+    metadata:
+      qualgate_id: python.drf-serializer-all-fields
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: VC-05
+      qualgate_owasp_api: ["API3:2023"]
+      cwe: "CWE-213"

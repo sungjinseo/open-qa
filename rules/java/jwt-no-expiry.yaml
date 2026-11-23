@@ -1,0 +1,20 @@
+rules:
+  - id: java.jwt-no-expiry
+    languages: [java]
+    severity: WARNING
+    message: "[행안부 확장 VC-07 만료 없는 인증 토큰] JWT를 만료 시간 없이 발급합니다. 토큰이 유출되면 영구히 쓸 수 있습니다. setExpiration()(jjwt)이나 withExpiresAt()(java-jwt)으로 짧게 만료시키세요."
+    pattern-either:
+      - patterns:
+          - pattern: Jwts.builder(). ... .compact()
+          - pattern-not: Jwts.builder(). ... .setExpiration(...). ... .compact()
+          - pattern-not: Jwts.builder(). ... .expiration(...). ... .compact()
+      - patterns:
+          - pattern: JWT.create(). ... .sign($A)
+          - pattern-not: JWT.create(). ... .withExpiresAt(...). ... .sign($A)
+    metadata:
+      qualgate_id: java.jwt-no-expiry
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: VC-07
+      qualgate_owasp_api: ["API2:2023"]
+      cwe: "CWE-613"

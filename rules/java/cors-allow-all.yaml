@@ -1,0 +1,23 @@
+rules:
+  - id: java.cors-allow-all
+    languages: [java]
+    severity: INFO
+    message: "[행안부 확장 VC-03 과도하게 열린 CORS] CORS를 모든 출처(*)에 열었습니다. 인증이 필요한 API라면 다른 사이트의 스크립트가 사용자 권한으로 호출할 수 있습니다. 허용할 도메인을 명시하세요."
+    pattern-either:
+      - pattern: $R.allowedOrigins(..., "*", ...)
+      - pattern: $R.allowedOriginPatterns(..., "*", ...)
+      - pattern: $C.addAllowedOrigin("*")
+      - pattern: $C.addAllowedOriginPattern("*")
+      - pattern: $C.setAllowedOrigins(List.of("*"))
+      - pattern: $C.setAllowedOrigins(Arrays.asList("*"))
+      - pattern: $C.setAllowedOrigins(Collections.singletonList("*"))
+      - pattern: $RES.setHeader("Access-Control-Allow-Origin", "*")
+      - pattern: $RES.addHeader("Access-Control-Allow-Origin", "*")
+    metadata:
+      qualgate_id: java.cors-allow-all
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_kind: hotspot
+      qualgate_mois: VC-03
+      qualgate_owasp_api: ["API8:2023"]
+      cwe: "CWE-942"

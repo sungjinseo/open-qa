@@ -25,6 +25,9 @@ pub fn dirs_for_file(path: &str) -> &'static [&'static str] {
     }
 }
 
+/// 보고서에서 파일이 속하는 언어 키(가장 구체적인 규칙 디렉터리). `.tsx`는 `react`, `.vue`는 `vue`.
+pub fn report_lang(path: &str) -> Option<&'static str> { dirs_for_file(path).last().copied() }
+
 /// 실행할 디렉터리 = 룰셋에서 켜짐 ∩ (프로젝트 `languages` 또는 파일로 자동 감지). 정렬된 목록.
 pub fn active_dirs(rs: &Ruleset, project_langs: Option<&[String]>, files: &[String]) -> Vec<String> {
     let wanted: BTreeSet<&str> = match project_langs {
@@ -116,6 +119,11 @@ mod tests {
         assert!(dirs_for_file("README.md").is_empty());
         assert!(dirs_for_file(".java").is_empty());
         assert!(dirs_for_file("src/java").is_empty());
+        assert_eq!(report_lang("a.tsx"), Some("react"));
+        assert_eq!(report_lang("a.vue"), Some("vue"));
+        assert_eq!(report_lang("a.ts"), Some("ts"));
+        assert_eq!(report_lang("a/B.java"), Some("java"));
+        assert_eq!(report_lang("README.md"), None);
     }
 
     #[test]
@@ -128,7 +136,7 @@ mod tests {
         assert!(targeted_files(&code, &[]).is_empty());
     }
 
-    const RS: &str ="[languages.java]\n[languages.ts]\n[languages.react]\n[languages.go]\nenabled = false\n";
+    const RS: &str = "[languages.java]\n[languages.ts]\n[languages.react]\n[languages.go]\nenabled = false\n";
 
     #[test]
     fn active_dirs_intersects_ruleset_with_detected_or_declared() {

@@ -9,3 +9,4 @@ rules:
       qualgate_id: kotlin.trust-all-hostnames
       qualgate_severity: critical
       qualgate_category: security
+      qualgate_owasp_api: ["API8:2023", "API10:2023"]

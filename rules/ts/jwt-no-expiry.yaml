@@ -1,0 +1,21 @@
+rules:
+  - id: ts.jwt-no-expiry
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "[행안부 확장 VC-07 만료 없는 인증 토큰] JWT를 만료 시간 없이 발급합니다. 토큰이 유출되면 영구히 쓸 수 있습니다. expiresIn(예: \"15m\")을 지정하고 재발급은 refresh 토큰으로 하세요."
+    patterns:
+      - pattern-either:
+          - pattern: $J.sign($P, $K)
+          - pattern: $J.sign($P, $K, {...})
+      - metavariable-regex:
+          metavariable: $J
+          regex: ^(jwt|jsonwebtoken)$
+      - pattern-not: '$J.sign($P, $K, {..., expiresIn: $E, ...})'
+      - pattern-not: '$J.sign({..., exp: $E, ...}, ...)'
+    metadata:
+      qualgate_id: ts.jwt-no-expiry
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: VC-07
+      qualgate_owasp_api: ["API2:2023"]
+      cwe: "CWE-613"

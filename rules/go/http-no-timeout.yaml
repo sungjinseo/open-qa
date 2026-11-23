@@ -9,3 +9,4 @@ rules:
       qualgate_id: go.http-no-timeout
       qualgate_severity: medium
       qualgate_category: reliability
+      qualgate_owasp_api: ["API4:2023"]

@@ -319,7 +319,7 @@ mod tests {
     fn catalog() -> Catalog {
         Catalog::from_rules(vec![RuleInfo {
             id: "python.eval".into(), dir: "python".into(), severity: Severity::Medium, kind: Kind::Issue,
-            category: "c".into(), mois: None, cwe: None, title: "t".into(),
+            category: "c".into(), mois: None, cwe: None, title: "t".into(), owasp_api: vec![],
         }])
     }
 

@@ -1,0 +1,13 @@
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+class OrderController {
+    private final OrderRepository repo;
+
+    OrderController(OrderRepository repo) { this.repo = repo; }
+
+    @GetMapping("/orders/{id}")
+    Order get(@PathVariable Long id) {
+        return repo.findById(id).orElseThrow();
+    }
+}

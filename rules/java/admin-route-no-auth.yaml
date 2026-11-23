@@ -1,0 +1,45 @@
+rules:
+  - id: java.admin-route-no-auth
+    languages: [java]
+    severity: INFO
+    message: "[행안부 SF-01 적절한 인증 없는 중요 기능 허용] 관리·내부 경로(/admin, /internal, /manage) 핸들러에 메서드 보안(@PreAuthorize·@Secured·@RolesAllowed)이 없습니다. 보안 설정에서 경로를 막지 않았다면 일반 사용자도 관리 기능을 호출할 수 있습니다. 권한 검사를 핸들러나 컨트롤러에 명시하세요."
+    patterns:
+      - pattern-either:
+          - pattern: |
+              @$A($P)
+              $RET $M(...) { ... }
+          - pattern: |
+              @$A(value = $P, ...)
+              $RET $M(...) { ... }
+          - pattern: |
+              @$A(path = $P, ...)
+              $RET $M(...) { ... }
+      - metavariable-regex:
+          metavariable: $A
+          regex: ^(Get|Post|Put|Delete|Patch|Request)Mapping$
+      - metavariable-regex:
+          metavariable: $P
+          regex: ^"/(admin|internal|manage)
+      - pattern-not: |
+          @PreAuthorize(...)
+          $RET $M(...) { ... }
+      - pattern-not: |
+          @Secured(...)
+          $RET $M(...) { ... }
+      - pattern-not: |
+          @RolesAllowed(...)
+          $RET $M(...) { ... }
+      - pattern-not-inside: |
+          @PreAuthorize(...)
+          class $C { ... }
+      - pattern-not-inside: |
+          @Secured(...)
+          class $C { ... }
+    metadata:
+      qualgate_id: java.admin-route-no-auth
+      qualgate_severity: low
+      qualgate_category: security
+      qualgate_kind: hotspot
+      qualgate_mois: SF-01
+      qualgate_owasp_api: ["API5:2023"]
+      cwe: "CWE-285"

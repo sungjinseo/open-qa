@@ -36,6 +36,26 @@ spec:
     - name: FAIL_ON_GATE
       type: string
       default: "true"
+    - name: RULES_REPO
+      type: string
+      description: Gitea repository (owner/repo) whose rules/<language>/*.yaml are scanned. Empty uses the rules bundled in the image.
+      default: platform/qualgate-rules
+    - name: RULES_REF
+      type: string
+      description: Branch or tag of RULES_REPO.
+      default: main
+    - name: REPORT_FORMATS
+      type: string
+      description: Analysis report formats, comma separated subset of html, md, xlsx ("[html, md, xlsx]" is also accepted). One file per language. Empty disables reports.
+      default: html,md,xlsx
+    - name: REPORT_NAME
+      type: string
+      description: Report file name prefix, <REPORT_NAME>-<language>-analysis-report.<format>. Empty uses the TaskRun name; pass $(context.pipelineRun.name) from the pipeline.
+      default: ""
+    - name: REPORT_DIR
+      type: string
+      description: Report directory relative to the source workspace.
+      default: qualgate-report
   workspaces:
     - name: source
     - name: basic-auth
@@ -73,12 +93,19 @@ spec:
           value: $(params.CONFIG_REF)
         - name: CRT_FILENAME
           value: $(params.CRT_FILENAME)
+        - name: SOURCE_DIR
+          value: $(workspaces.source.path)/$(params.CONTEXT_DIR)
       script: |
         #!/bin/sh
         set -eu
         if [ "$(workspaces.ssl-ca-directory.bound)" = "true" ]; then
           export QUALGATE_CA_FILE="$(workspaces.ssl-ca-directory.path)/${CRT_FILENAME}"
         fi
+        # The catalog git-clone task publishes an abbreviated sha; expand it from the checkout.
+        case "${#COMMIT}" in
+          40|64) ;;
+          *) COMMIT="$(git -c safe.directory='*' -C "${SOURCE_DIR}" rev-parse --verify "${COMMIT}^{commit}")" ;;
+        esac
         exec qualgate fetch-config \
           --repo "${REPO_ORG}/${REPO_NAME}" \
           --branch "${REVISION}" \
@@ -86,6 +113,50 @@ spec:
           --config-repo "${CONFIG_REPO}" \
           --ref "${CONFIG_REF}" \
           --out /work/config
+      volumeMounts:
+        - name: work
+          mountPath: /work
+    - name: fetch-rules
+      image: $(params.IMAGE)
+      env:
+        - name: GIT_HOST_URL
+          value: $(params.GIT_HOST_URL)
+        - name: RULES_REPO
+          value: $(params.RULES_REPO)
+        - name: RULES_REF
+          value: $(params.RULES_REF)
+        - name: SSL_VERIFY
+          value: $(params.SSL_VERIFY)
+        - name: CRT_FILENAME
+          value: $(params.CRT_FILENAME)
+      script: |
+        #!/bin/sh
+        set -eu
+        # Publishes the rule catalog for scan at /work/rules (QUALGATE_RULES).
+        if [ -z "${RULES_REPO}" ]; then
+          ln -s /rules /work/rules
+          echo "rules: bundled /rules"
+          exit 0
+        fi
+        # Ignore the workspace .gitconfig; TLS and credentials are set explicitly below.
+        export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0 HOME=/tmp
+        set -- -c http.sslVerify="${SSL_VERIFY}"
+        if [ "$(workspaces.ssl-ca-directory.bound)" = "true" ]; then
+          set -- "$@" -c http.sslCAInfo="$(workspaces.ssl-ca-directory.path)/${CRT_FILENAME}"
+        fi
+        # Read-only lookup in the basic-auth .git-credentials; never stores or prints it.
+        CRED="$(workspaces.basic-auth.path)/.git-credentials"
+        set -- "$@" -c credential.helper= \
+          -c credential.helper="!f() { test \"\$1\" = get && git credential-store --file=${CRED} get; }; f"
+        git "$@" clone -q --depth 1 --branch "${RULES_REF}" \
+          "${GIT_HOST_URL%/}/${RULES_REPO}.git" /work/rules-src
+        [ -d /work/rules-src/rules ] || { echo "${RULES_REPO}@${RULES_REF} has no rules/ directory" >&2; exit 1; }
+        ln -s /work/rules-src/rules /work/rules
+        count=0
+        for d in java kotlin python react vue go ts; do
+          for f in /work/rules/"$d"/*.yaml; do if [ -e "$f" ]; then count=$((count + 1)); fi; done
+        done
+        echo "rules: ${RULES_REPO}@${RULES_REF} commit $(git -C /work/rules-src rev-parse HEAD), ${count} rule files"
       volumeMounts:
         - name: work
           mountPath: /work
@@ -102,6 +173,32 @@ spec:
       env:
         - name: QUALGATE_BRANCH
           value: $(params.REVISION)
+        - name: QUALGATE_RULES
+          value: /work/rules
+      volumeMounts:
+        - name: work
+          mountPath: /work
+    - name: report
+      image: $(params.IMAGE)
+      env:
+        - name: QUALGATE_RULES
+          value: /work/rules
+        - name: REPORT_FORMATS
+          value: $(params.REPORT_FORMATS)
+        - name: REPORT_NAME
+          value: $(params.REPORT_NAME)
+        - name: TASKRUN_NAME
+          value: $(context.taskRun.name)
+        - name: REPORT_DIR
+          value: $(workspaces.source.path)/$(params.REPORT_DIR)
+        - name: SOURCE_DIR
+          value: $(workspaces.source.path)/$(params.CONTEXT_DIR)
+      script: |
+        #!/bin/sh
+        set -u
+        # Per-language analysis reports. Runs before publish so a failed gate still leaves reports;
+        # a report failure is logged and never blocks publish.
+        qualgate report           --out /work/out           --src "${SOURCE_DIR}"           --format "${REPORT_FORMATS}"           --report-dir "${REPORT_DIR}"           --name "${REPORT_NAME:-${TASKRUN_NAME}}"           || echo "report: failed; continuing to publish" >&2
       volumeMounts:
         - name: work
           mountPath: /work

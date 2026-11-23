@@ -107,6 +107,18 @@ pub struct CoverageStatus {
     pub not_in_report: Vec<String>,
 }
 
+/// 언어별(보고서 언어 키, `select::report_lang`) 분량과 지표.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct LangStats {
+    /// 테스트가 아닌 코드 파일 수.
+    pub files: u64,
+    pub test_files: u64,
+    /// 테스트가 아닌 코드 파일의 줄 수(중복 탐지가 읽은 파일).
+    pub lines: u64,
+    pub coverage: Option<f64>,
+    pub duplicated_lines: Option<f64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PublishConfig { pub max_new_issues: usize, pub labels: Vec<String> }
 
@@ -133,6 +145,9 @@ pub struct ScanResult {
     pub new_code_measured: bool,
     /// 프로젝트가 `coverage.required`인데 커버리지를 측정하지 못했다. `publish`가 게이트 판정에 넘긴다.
     pub coverage_required_missing: bool,
+    /// 보고서 언어 키별 분량과 지표. 이 필드 도입 전 결과에는 없다.
+    #[serde(default)]
+    pub languages: BTreeMap<String, LangStats>,
 }
 
 #[cfg(test)]

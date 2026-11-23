@@ -312,7 +312,7 @@ mod tests {
     fn info(id: &str, dir: &str) -> RuleInfo {
         RuleInfo {
             id: id.into(), dir: dir.into(), severity: Severity::Medium, kind: Kind::Issue,
-            category: "c".into(), mois: None, cwe: None, title: "t".into(),
+            category: "c".into(), mois: None, cwe: None, title: "t".into(), owasp_api: vec![],
         }
     }
 

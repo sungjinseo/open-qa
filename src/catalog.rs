@@ -19,6 +19,37 @@ pub struct RuleInfo {
     pub mois: Option<String>,
     pub cwe: Option<String>,
     pub title: String,
+    /// OWASP API Security Top 10 항목(예: `API3:2023`). `metadata.qualgate_owasp_api`(목록 또는 쉼표 문자열).
+    #[serde(default)]
+    pub owasp_api: Vec<String>,
+}
+
+/// OWASP API Security Top 10 (2023) 항목 ID와 이름.
+pub const OWASP_API: [(&str, &str); 10] = [
+    ("API1:2023", "Broken Object Level Authorization"),
+    ("API2:2023", "Broken Authentication"),
+    ("API3:2023", "Broken Object Property Level Authorization"),
+    ("API4:2023", "Unrestricted Resource Consumption"),
+    ("API5:2023", "Broken Function Level Authorization"),
+    ("API6:2023", "Unrestricted Access to Sensitive Business Flows"),
+    ("API7:2023", "Server Side Request Forgery"),
+    ("API8:2023", "Security Misconfiguration"),
+    ("API9:2023", "Improper Inventory Management"),
+    ("API10:2023", "Unsafe Consumption of APIs"),
+];
+
+fn owasp_api(name: &str, v: Option<&serde_yaml::Value>) -> anyhow::Result<Vec<String>> {
+    let items: Vec<String> = match v {
+        None | Some(serde_yaml::Value::Null) => vec![],
+        Some(serde_yaml::Value::String(s)) => s.split(',').map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect(),
+        Some(serde_yaml::Value::Sequence(seq)) => seq.iter().map(|x| x.as_str().map(|s| s.trim().to_string())
+            .ok_or_else(|| anyhow!("{name}: qualgate_owasp_api 항목은 문자열이어야 함"))).collect::<anyhow::Result<_>>()?,
+        Some(_) => bail!("{name}: qualgate_owasp_api는 목록이나 문자열이어야 함"),
+    };
+    for i in &items {
+        if !OWASP_API.iter().any(|(id, _)| id == i) { bail!("{name}: qualgate_owasp_api 값 오류({i}). API1:2023..API10:2023 중 하나여야 함"); }
+    }
+    Ok(items)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -81,11 +112,12 @@ fn read_rule(dir: &str, file: &Path) -> anyhow::Result<RuleInfo> {
         Some("hotspot") => Kind::Hotspot,
         Some(o) => bail!("{name}: qualgate_kind는 issue 또는 hotspot이어야 함({o})"),
     };
+    let owasp_api = owasp_api(&name.to_string(), meta.and_then(|m| m.get("qualgate_owasp_api")))?;
     let title = s(rule.get("message")).and_then(|t| t.lines().next().map(str::to_string)).unwrap_or_default();
     Ok(RuleInfo {
         id, dir: dir.to_string(), severity, kind,
         category: m("qualgate_category").unwrap_or_default(),
-        mois: m("qualgate_mois"), cwe: m("cwe"), title,
+        mois: m("qualgate_mois"), cwe: m("cwe"), title, owasp_api,
     })
 }
 
@@ -103,9 +135,13 @@ mod tests {
     #[test]
     fn load_reads_kind_and_metadata() {
         let t = tempfile::tempdir().unwrap();
-        rule(&t.path().join("go"), "a", "go.a", "      qualgate_kind: hotspot\n");
+        rule(&t.path().join("go"), "a", "go.a", "      qualgate_kind: hotspot\n      qualgate_owasp_api: [\"API2:2023\", \"API8:2023\"]\n");
         rule(&t.path().join("go"), "b", "go.b", "");
+        rule(&t.path().join("go"), "c", "go.c", "      qualgate_owasp_api: \"API7:2023, API10:2023\"\n");
         let c = Catalog::load(t.path()).unwrap();
+        assert_eq!(c.rules["go.a"].owasp_api, ["API2:2023", "API8:2023"]);
+        assert!(c.rules["go.b"].owasp_api.is_empty());
+        assert_eq!(c.rules["go.c"].owasp_api, ["API7:2023", "API10:2023"]);
         assert_eq!(c.rules["go.a"].kind, Kind::Hotspot);
         assert_eq!(c.rules["go.b"].kind, Kind::Issue);
         let a = &c.rules["go.a"];
@@ -114,9 +150,28 @@ mod tests {
         assert_eq!(c.dir_of("go.a"), Some("go"));
         assert_eq!(c.dir_of("go.zz"), None);
         let j = c.to_json();
-        assert_eq!(j.as_array().unwrap().len(), 2);
+        assert_eq!(j.as_array().unwrap().len(), 3);
         assert_eq!(j[0]["id"], "go.a");
         assert_eq!(j[0]["kind"], "hotspot");
+        assert_eq!(j[0]["owasp_api"][1], "API8:2023");
+    }
+
+    #[test]
+    fn owasp_api_values_are_checked() {
+        let t = tempfile::tempdir().unwrap();
+        rule(&t.path().join("go"), "a", "go.a", "      qualgate_owasp_api: [\"API11:2023\"]\n");
+        let e = Catalog::load(t.path()).unwrap_err().to_string();
+        assert!(e.contains("qualgate_owasp_api 값 오류(API11:2023)"), "{e}");
+    }
+
+    #[test]
+    fn bundled_rules_load_with_owasp_api_tags() {
+        let c = Catalog::load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("rules")).unwrap();
+        let tagged = c.rules.values().filter(|r| !r.owasp_api.is_empty()).count();
+        assert!(tagged >= 100, "{tagged}");
+        for (id, _) in OWASP_API.iter().filter(|(id, _)| !matches!(*id, "API6:2023" | "API9:2023")) {
+            assert!(c.rules.values().any(|r| r.owasp_api.iter().any(|x| x == id)), "{id}에 연결된 규칙이 없음");
+        }
     }
 
     #[test]

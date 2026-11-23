@@ -1,0 +1,23 @@
+rules:
+  - id: python.mass-assignment-kwargs
+    languages: [python]
+    severity: WARNING
+    message: "[행안부 확장 VC-05 대량 할당·과도한 속성 노출] 요청 본문 전체를 키워드 인자나 setattr로 모델에 넣습니다. 요청에 is_admin·owner_id 같은 필드를 넣으면 그대로 저장됩니다(Mass Assignment). 허용한 필드만 골라 넣거나 스키마(pydantic·marshmallow)로 검증한 값만 쓰세요."
+    pattern-either:
+      - pattern: $F(..., **request.json, ...)
+      - pattern: $F(..., **request.get_json(...), ...)
+      - pattern: $F(..., **request.data, ...)
+      - pattern: $F(..., **request.form, ...)
+      - pattern: $F(..., **request.POST.dict(), ...)
+      - patterns:
+          - pattern-inside: |
+              for $K, $V in request.$SRC.items():
+                ...
+          - pattern: setattr($O, $K, $V)
+    metadata:
+      qualgate_id: python.mass-assignment-kwargs
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_mois: VC-05
+      qualgate_owasp_api: ["API3:2023"]
+      cwe: "CWE-915"

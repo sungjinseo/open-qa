@@ -22,4 +22,5 @@ rules:
       qualgate_severity: medium
       qualgate_category: security
       qualgate_mois: IV-15
+      qualgate_owasp_api: ["API5:2023"]
       cwe: "CWE-807"

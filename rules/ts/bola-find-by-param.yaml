@@ -1,0 +1,28 @@
+rules:
+  - id: ts.bola-find-by-param
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "[행안부 SF-02 부적절한 인가] 요청 경로의 ID(req.params)로 객체를 바로 조회·수정·삭제하고 소유자 조건이 없습니다. ID만 바꿔 다른 사용자의 데이터에 접근할 수 있습니다(BOLA). 조회 조건에 인증 사용자(req.user.id 등)를 함께 넣거나 조회 뒤 소유권을 확인하세요."
+    patterns:
+      - pattern-either:
+          - pattern: $M.findById($REQ.params.$X, ...)
+          - pattern: $M.findByPk($REQ.params.$X, ...)
+          - pattern: $M.findByIdAndUpdate($REQ.params.$X, ...)
+          - pattern: $M.findByIdAndDelete($REQ.params.$X, ...)
+          - pattern: '$M.findUnique({ where: { id: $REQ.params.$X } })'
+          - pattern: '$M.findUnique({ where: { id: Number($REQ.params.$X) } })'
+          - pattern: '$M.findOne({ where: { id: $REQ.params.$X } })'
+          - pattern: '$M.delete({ where: { id: $REQ.params.$X } })'
+      - pattern-not: '$M.$F({..., where: {..., $K: $REQ.user.$U, ...}, ...})'
+      - pattern-not: '$M.$F({..., where: {..., $K: $REQ.auth.$U, ...}, ...})'
+      - metavariable-regex:
+          metavariable: $REQ
+          regex: ^(req|request)$
+    metadata:
+      qualgate_id: ts.bola-find-by-param
+      qualgate_severity: medium
+      qualgate_category: security
+      qualgate_kind: hotspot
+      qualgate_mois: SF-02
+      qualgate_owasp_api: ["API1:2023"]
+      cwe: "CWE-639"

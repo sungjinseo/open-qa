@@ -198,6 +198,7 @@ mod tests {
             publish: PublishConfig { max_new_issues: 20, labels: vec!["qualgate".into()] },
             active_dirs: vec![], active_rules: vec!["r".into()], gate_conditions: vec![],
             config_source: serde_json::Value::Null, new_hotspots: vec![], new_code_measured: false, coverage_required_missing: false,
+            languages: Default::default(),
         }
     }
 
